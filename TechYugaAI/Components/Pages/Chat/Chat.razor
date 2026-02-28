@@ -1,0 +1,133 @@
+﻿@page "/"
+@using System.ComponentModel
+@using TechYugaAI.Models
+@using TechYugaAI.Services
+@inject IChatClient ChatClient
+@inject NavigationManager Nav
+@inject SemanticSearch Search
+@implements IDisposable
+
+<PageTitle>TechYugaAI - @currentMode.ToString()</PageTitle>
+
+@* --- COMMON UI TOOLBAR --- *@
+<div class="techyuga-nav d-flex gap-2 p-3 bg-light border-bottom">
+    <button class="btn @(currentMode == TechYugaMode.General ? "btn-primary" : "btn-outline-primary")" @onclick="() => SwitchMode(TechYugaMode.General)">General Chat</button>
+    <button class="btn @(currentMode == TechYugaMode.CVCreator ? "btn-primary" : "btn-outline-primary")" @onclick="() => SwitchMode(TechYugaMode.CVCreator)">CV Creator</button>
+    <button class="btn @(currentMode == TechYugaMode.BidMaker ? "btn-primary" : "btn-outline-primary")" @onclick="() => SwitchMode(TechYugaMode.BidMaker)">Bid Maker</button>
+    <button class="btn @(currentMode == TechYugaMode.ProjectProposal ? "btn-primary" : "btn-outline-primary")" @onclick="() => SwitchMode(TechYugaMode.ProjectProposal)">Proposals</button>
+</div>
+
+<ChatHeader OnNewChat="@ResetConversationAsync" />
+
+<ChatMessageList Messages="@messages" InProgressMessage="@currentResponseMessage">
+    <NoMessagesContent>
+        <div class="p-4 text-center">
+            <h3>Welcome to TechYugaAI</h3>
+            <p>Current Mode: <strong>@currentMode</strong></p>
+            <p>Select a tool above to start a specialized session.</p>
+        </div>
+    </NoMessagesContent>
+</ChatMessageList>
+
+<div class="chat-container">
+    <ChatSuggestions OnSelected="@AddUserMessageAsync" @ref="@chatSuggestions" />
+    <ChatInput OnSend="@AddUserMessageAsync" @ref="@chatInput" />
+</div>
+
+@code {
+    private TechYugaMode currentMode = TechYugaMode.General;
+
+    private string GetSystemPrompt() => currentMode switch
+    {
+        TechYugaMode.CVCreator => "You are the TechYuga CV Agent. Guide the user to provide work history, education, and skills. Use GenerateCVDoc when they are finished.",
+        TechYugaMode.BidMaker => "You are the TechYuga Bid Specialist. Help users estimate costs. Use CalculateBid for any pricing logic.",
+        TechYugaMode.ProjectProposal => "You are the TechYuga Proposal Architect. Draft formal project scopes and timelines.",
+        _ => "You are TechYugaAI, a professional assistant using RAG to answer questions."
+    };
+
+    private int statefulMessageCount;
+    private readonly ChatOptions chatOptions = new();
+    private readonly List<ChatMessage> messages = new();
+    private CancellationTokenSource? currentResponseCancellation;
+    private ChatMessage? currentResponseMessage;
+    private ChatInput? chatInput;
+    private ChatSuggestions? chatSuggestions;
+    private TechYugaAgentTools agentTools = new();
+
+    protected override void OnInitialized()
+    {
+        InitializeTools();
+        messages.Add(new(ChatRole.System, GetSystemPrompt()));
+    }
+
+    private void InitializeTools()
+    {
+        chatOptions.Tools = [
+            AIFunctionFactory.Create(LoadDocumentsAsync),
+            AIFunctionFactory.Create(SearchAsync),
+            AIFunctionFactory.Create(agentTools.GenerateCVDoc),
+            AIFunctionFactory.Create(agentTools.CalculateBid)
+        ];
+    }
+
+    private async Task SwitchMode(TechYugaMode newMode)
+    {
+        currentMode = newMode;
+        await ResetConversationAsync();
+    }
+
+    private async Task AddUserMessageAsync(ChatMessage userMessage)
+    {
+        CancelAnyCurrentResponse();
+        messages.Add(userMessage);
+        chatSuggestions?.Clear();
+        await chatInput!.FocusAsync();
+
+        var responseText = new TextContent("");
+        currentResponseMessage = new ChatMessage(ChatRole.Assistant, [responseText]);
+        currentResponseCancellation = new();
+
+        await foreach (var update in ChatClient.GetStreamingResponseAsync(messages.Skip(statefulMessageCount), chatOptions, currentResponseCancellation.Token))
+        {
+            messages.AddMessages(update, filter: c => c is not TextContent);
+            responseText.Text += update.Text;
+            chatOptions.ConversationId = update.ConversationId;
+            ChatMessageItem.NotifyChanged(currentResponseMessage);
+        }
+
+        messages.Add(currentResponseMessage!);
+        statefulMessageCount = chatOptions.ConversationId is not null ? messages.Count : 0;
+        currentResponseMessage = null;
+        chatSuggestions?.Update(messages);
+    }
+
+    private async Task ResetConversationAsync()
+    {
+        CancelAnyCurrentResponse();
+        messages.Clear();
+        messages.Add(new(ChatRole.System, GetSystemPrompt()));
+        chatOptions.ConversationId = null;
+        statefulMessageCount = 0;
+        chatSuggestions?.Clear();
+        await chatInput!.FocusAsync();
+    }
+
+    private void CancelAnyCurrentResponse()
+    {
+        if (currentResponseMessage is not null) messages.Add(currentResponseMessage);
+        currentResponseCancellation?.Cancel();
+        currentResponseMessage = null;
+    }
+
+    [Description("Loads documents for search.")]
+    private async Task LoadDocumentsAsync() => await Search.LoadDocumentsAsync();
+
+    [Description("Searches for information.")]
+    private async Task<IEnumerable<string>> SearchAsync(string searchPhrase, string? filenameFilter = null)
+    {
+        var results = await Search.SearchAsync(searchPhrase, filenameFilter, maxResults: 5);
+        return results.Select(result => $"<result filename=\"{result.DocumentId}\">{result.Text}</result>");
+    }
+
+    public void Dispose() => currentResponseCancellation?.Cancel();
+}
