@@ -1,0 +1,200 @@
+@using TechYugaAI.Models.Cv
+
+<div class="cv-template cv-template-atlas" style="--cv-accent:@AccentHex">
+    <div class="cv-atlas-header">
+        <div>
+            @if (!string.IsNullOrWhiteSpace(Draft.FullName))
+            {
+                <div class="cv-name">@Draft.FullName</div>
+            }
+            @if (!string.IsNullOrWhiteSpace(Draft.Headline ?? Draft.RoleTarget))
+            {
+                <div class="cv-headline">@((Draft.Headline ?? Draft.RoleTarget)!)</div>
+            }
+        </div>
+        @if (ContactLinks.Count > 0)
+        {
+            <div class="cv-atlas-contact">
+                @foreach (var link in ContactLinks)
+                {
+                    if (string.IsNullOrWhiteSpace(link.Url))
+                    {
+                        <div>@link.Label</div>
+                    }
+                    else
+                    {
+                        <a class="cv-link" href="@link.Url" target="@link.Target" rel="noreferrer">@link.Label</a>
+                    }
+                }
+            </div>
+        }
+    </div>
+
+    <div class="cv-atlas-body">
+        <section class="cv-atlas-main">
+            @if (!string.IsNullOrWhiteSpace(Draft.Summary))
+            {
+                <div class="cv-atlas-summary">
+                    <div class="cv-block-title">Summary</div>
+                    <p>@Draft.Summary</p>
+                </div>
+            }
+
+            @if (Draft.Experiences.Count > 0)
+            {
+                <div class="cv-block">
+                    <div class="cv-block-title">Experience</div>
+                    @foreach (var exp in Draft.Experiences)
+                    {
+                        <div class="cv-item">
+                            <div class="cv-item-header">@exp.Title - @exp.Company</div>
+                            <div class="cv-item-meta">@exp.StartDate - @(string.IsNullOrWhiteSpace(exp.EndDate) ? "Present" : exp.EndDate)</div>
+                            @if (exp.Highlights.Count > 0)
+                            {
+                                <ul>
+                                    @foreach (var highlight in exp.Highlights)
+                                    {
+                                        <li>@highlight</li>
+                                    }
+                                </ul>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+
+            @if (Draft.Projects.Count > 0)
+            {
+                <div class="cv-block">
+                    <div class="cv-block-title">Projects</div>
+                    @foreach (var project in Draft.Projects)
+                    {
+                        <div class="cv-item">
+                            <div class="cv-item-header">@project.Name</div>
+                            @if (!string.IsNullOrWhiteSpace(project.Role))
+                            {
+                                <div class="cv-item-meta">@project.Role</div>
+                            }
+                            @if (!string.IsNullOrWhiteSpace(project.Link))
+                            {
+                                <a class="cv-item-meta cv-link" href="@NormalizeUrl(project.Link)" target="_blank" rel="noreferrer">@project.Link</a>
+                            }
+                            <p>@project.Description</p>
+                        </div>
+                    }
+                </div>
+            }
+        </section>
+
+        <aside class="cv-atlas-sidebar">
+            @if (Draft.SkillGroups.Count > 0 || Draft.Skills.Count > 0)
+            {
+                <div class="cv-block">
+                    <div class="cv-block-title">Skills</div>
+                    @if (Draft.SkillGroups.Count > 0)
+                    {
+                        @foreach (var group in Draft.SkillGroups)
+                        {
+                            @if (!string.IsNullOrWhiteSpace(group.Name))
+                            {
+                                <div class="cv-item-header">@group.Name</div>
+                            }
+                            <div class="cv-skill-items">@string.Join(", ", group.Items)</div>
+                        }
+                    }
+                    else
+                    {
+                        <div class="cv-skill-items">@string.Join(", ", Draft.Skills)</div>
+                    }
+                </div>
+            }
+
+            @if (Draft.Education.Count > 0)
+            {
+                <div class="cv-block">
+                    <div class="cv-block-title">Education</div>
+                    @foreach (var edu in Draft.Education)
+                    {
+                        <div class="cv-item">
+                            <div class="cv-item-header">@edu.Degree - @edu.Institution</div>
+                            <div class="cv-item-meta">@edu.StartDate - @edu.EndDate</div>
+                        </div>
+                    }
+                </div>
+            }
+
+            @if (Draft.Certifications.Count > 0)
+            {
+                <div class="cv-block">
+                    <div class="cv-block-title">Certifications</div>
+                    @foreach (var cert in Draft.Certifications)
+                    {
+                        <div class="cv-item">@cert.Name - @cert.Issuer</div>
+                    }
+                </div>
+            }
+        </aside>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public required CvDraft Draft { get; set; }
+
+    [Parameter, EditorRequired]
+    public required string AccentHex { get; set; }
+
+    private List<ContactLink> ContactLinks => BuildContactLinks(Draft.Contact);
+
+    private static List<ContactLink> BuildContactLinks(CvContact? contact)
+    {
+        var links = new List<ContactLink>();
+        if (contact is null)
+        {
+            return links;
+        }
+
+        if (!string.IsNullOrWhiteSpace(contact.Email))
+        {
+            links.Add(new ContactLink(contact.Email, $"mailto:{contact.Email}", null));
+        }
+        if (!string.IsNullOrWhiteSpace(contact.Phone))
+        {
+            links.Add(new ContactLink(contact.Phone, $"tel:{NormalizePhone(contact.Phone)}", null));
+        }
+        if (!string.IsNullOrWhiteSpace(contact.Location))
+        {
+            links.Add(new ContactLink(contact.Location, null, null));
+        }
+        if (!string.IsNullOrWhiteSpace(contact.LinkedIn))
+        {
+            links.Add(new ContactLink(contact.LinkedIn, NormalizeUrl(contact.LinkedIn), "_blank"));
+        }
+        if (!string.IsNullOrWhiteSpace(contact.Portfolio))
+        {
+            links.Add(new ContactLink(contact.Portfolio, NormalizeUrl(contact.Portfolio), "_blank"));
+        }
+        if (!string.IsNullOrWhiteSpace(contact.Website))
+        {
+            links.Add(new ContactLink(contact.Website, NormalizeUrl(contact.Website), "_blank"));
+        }
+
+        return links;
+    }
+
+    private static string NormalizeUrl(string value)
+    {
+        if (value.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+            || value.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            return value;
+        }
+
+        return $"https://{value}";
+    }
+
+    private static string NormalizePhone(string value)
+        => new string(value.Where(c => char.IsDigit(c) || c == '+').ToArray());
+
+    private sealed record ContactLink(string Label, string? Url, string? Target);
+}

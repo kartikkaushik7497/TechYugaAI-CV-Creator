@@ -6,8 +6,11 @@
     padding: 0.5rem 1.25rem;
     border-radius: 0.25rem; 
     color: #1F2937; 
-    white-space: pre-wrap; 
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
+
 
 .assistant-message, .assistant-search {
     display: grid;
@@ -22,6 +25,8 @@
 
 .assistant-message-text {
     grid-column-start: 2;
+    overflow-wrap: anywhere;
+    word-break: break-word;
 }
 
 .assistant-message-icon {
@@ -116,5 +121,12 @@
     display: block;
     padding: 0.5rem 1rem;
     margin: 1rem 0;
-    overflow-x: auto;
+    overflow-x: hidden;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+::deep a {
+    overflow-wrap: anywhere;
+    word-break: break-all;
 }

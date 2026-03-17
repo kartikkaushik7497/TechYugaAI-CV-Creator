@@ -1,0 +1,91 @@
+.cv-template-zen {
+    font-family: "Palatino Linotype", "Georgia", serif;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.75rem;
+    padding: 1.75rem;
+    background: #ffffff;
+    width: 100%;
+}
+
+.cv-zen-header {
+    text-align: center;
+    display: grid;
+    gap: 0.35rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid var(--cv-accent);
+}
+
+.cv-template-zen .cv-name {
+    font-size: 1.7rem;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.cv-template-zen .cv-headline {
+    font-size: 0.98rem;
+    color: #475569;
+}
+
+.cv-zen-contact {
+    font-size: 0.85rem;
+    color: #475569;
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+}
+
+.cv-zen-body {
+    display: grid;
+    gap: 1.25rem;
+    margin-top: 1.25rem;
+}
+
+.cv-template-zen .cv-block-title {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--cv-accent);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.cv-template-zen .cv-item {
+    display: grid;
+    gap: 0.35rem;
+    font-size: 0.9rem;
+}
+
+.cv-template-zen .cv-item-header {
+    font-weight: 600;
+}
+
+.cv-template-zen .cv-item-meta {
+    font-size: 0.82rem;
+    color: #6b7280;
+}
+
+.cv-template-zen ul {
+    padding-left: 0;
+    list-style: none;
+    font-size: 0.85rem;
+    color: #374151;
+}
+
+.cv-template-zen li::before {
+    content: "- ";
+    color: #6b7280;
+}
+
+.cv-template-zen p {
+    margin: 0.35rem 0;
+}
+
+.cv-contact-sep {
+    color: #94a3b8;
+}
+
+.cv-link {
+    color: inherit;
+    text-decoration: underline;
+    text-decoration-color: rgba(148, 163, 184, 0.8);
+}

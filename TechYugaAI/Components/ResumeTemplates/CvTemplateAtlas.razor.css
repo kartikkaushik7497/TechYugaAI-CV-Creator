@@ -1,0 +1,110 @@
+.cv-template-atlas {
+    font-family: "Cambria", "Georgia", serif;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    background: #ffffff;
+    width: 100%;
+}
+
+.cv-atlas-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid var(--cv-accent);
+}
+
+.cv-template-atlas .cv-name {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.cv-template-atlas .cv-headline {
+    font-size: 0.98rem;
+    color: #475569;
+}
+
+.cv-atlas-contact {
+    font-size: 0.8rem;
+    color: #4b5563;
+    display: grid;
+    gap: 0.25rem;
+    text-align: right;
+}
+
+.cv-atlas-body {
+    display: grid;
+    grid-template-columns: 1.4fr 1fr;
+    gap: 1.5rem;
+    margin-top: 1.25rem;
+}
+
+.cv-atlas-summary {
+    background: #fff7ed;
+    border: 1px solid rgba(124, 45, 18, 0.2);
+    border-radius: 0.75rem;
+    padding: 0.75rem 1rem;
+}
+
+.cv-template-atlas .cv-block-title {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--cv-accent);
+    border-bottom: 1px solid var(--cv-accent);
+    padding-bottom: 0.3rem;
+}
+
+.cv-template-atlas .cv-item {
+    display: grid;
+    gap: 0.35rem;
+    font-size: 0.9rem;
+}
+
+.cv-template-atlas .cv-item-header {
+    font-weight: 600;
+}
+
+.cv-template-atlas .cv-item-meta {
+    font-size: 0.82rem;
+    color: #6b7280;
+}
+
+.cv-template-atlas ul {
+    padding-left: 0;
+    list-style: none;
+    font-size: 0.85rem;
+    color: #374151;
+}
+
+.cv-template-atlas li::before {
+    content: "- ";
+    color: #6b7280;
+}
+
+.cv-template-atlas .cv-skill-items {
+    font-size: 0.85rem;
+    color: #1f2937;
+}
+
+.cv-link {
+    color: inherit;
+    text-decoration: underline;
+    text-decoration-color: rgba(148, 163, 184, 0.8);
+}
+
+@media (max-width: 720px) {
+    .cv-atlas-body {
+        grid-template-columns: 1fr;
+    }
+
+    .cv-atlas-header {
+        flex-direction: column;
+        text-align: left;
+    }
+
+    .cv-atlas-contact {
+        text-align: left;
+    }
+}

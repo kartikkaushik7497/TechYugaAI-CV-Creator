@@ -30,8 +30,11 @@ public sealed class CvPdfGenerator
 
         IDocument document = template.Id switch
         {
-            CvTemplateRegistry.MinimalId or CvTemplateRegistry.ZenId => new MinimalCvDocument(draft, template),
-            CvTemplateRegistry.ExecutiveId or CvTemplateRegistry.AtlasId => new ExecutiveCvDocument(draft, template),
+            CvTemplateRegistry.MinimalId => new MinimalCvDocument(draft, template),
+            CvTemplateRegistry.ZenId => new ZenCvDocument(draft, template),
+            CvTemplateRegistry.ExecutiveId => new ExecutiveCvDocument(draft, template),
+            CvTemplateRegistry.AtlasId => new AtlasCvDocument(draft, template),
+            CvTemplateRegistry.SlateId => new SlateCvDocument(draft, template),
             _ => new ModernCvDocument(draft, template)
         };
 
@@ -72,7 +75,7 @@ public sealed class CvPdfGenerator
 
         protected static void SectionTitle(ColumnDescriptor column, string title, string accentHex)
         {
-            column.Item().Text(title).FontSize(11).SemiBold().FontColor(accentHex);
+            column.Item().Text(title).FontSize(14f).SemiBold().FontColor(accentHex);
             column.Item().LineHorizontal(1).LineColor(accentHex);
             column.Item().PaddingBottom(4);
         }
@@ -121,15 +124,15 @@ public sealed class CvPdfGenerator
             }
             if (!string.IsNullOrWhiteSpace(contact.LinkedIn))
             {
-                yield return (contact.LinkedIn, NormalizeUrl(contact.LinkedIn));
+                yield return (ShortenLinkLabel(contact.LinkedIn), NormalizeUrl(contact.LinkedIn));
             }
             if (!string.IsNullOrWhiteSpace(contact.Portfolio))
             {
-                yield return (contact.Portfolio, NormalizeUrl(contact.Portfolio));
+                yield return (ShortenLinkLabel(contact.Portfolio), NormalizeUrl(contact.Portfolio));
             }
             if (!string.IsNullOrWhiteSpace(contact.Website))
             {
-                yield return (contact.Website, NormalizeUrl(contact.Website));
+                yield return (ShortenLinkLabel(contact.Website), NormalizeUrl(contact.Website));
             }
         }
 
@@ -146,6 +149,22 @@ public sealed class CvPdfGenerator
 
         protected static string NormalizePhone(string value)
             => new string(value.Where(c => char.IsDigit(c) || c == '+').ToArray());
+
+        protected static string ShortenLinkLabel(string value)
+        {
+            var cleaned = value.Trim();
+            cleaned = cleaned.Replace("https://", "", StringComparison.OrdinalIgnoreCase)
+                .Replace("http://", "", StringComparison.OrdinalIgnoreCase)
+                .TrimEnd('/');
+
+            const int maxLength = 40;
+            if (cleaned.Length <= maxLength)
+            {
+                return cleaned;
+            }
+
+            return $"{cleaned[..37]}...";
+        }
     }
 
     private sealed class ModernCvDocument : CvDocumentBase
@@ -164,7 +183,10 @@ public sealed class CvPdfGenerator
                     row.ConstantItem(190).Background(Template.AccentHex).Padding(16).Column(left =>
                     {
                         left.Spacing(8);
-                        left.Item().Text(Safe(Draft.FullName, "Resume Draft")).FontSize(18).FontColor(Colors.White).SemiBold();
+                        if (!string.IsNullOrWhiteSpace(Draft.FullName))
+                        {
+                            left.Item().Text(Draft.FullName).FontSize(18).FontColor(Colors.White).SemiBold();
+                        }
                         if (!string.IsNullOrWhiteSpace(Draft.Headline ?? Draft.RoleTarget))
                         {
                             left.Item().Text(Safe(Draft.Headline ?? Draft.RoleTarget)).FontColor(Colors.Grey.Lighten4);
@@ -264,6 +286,266 @@ public sealed class CvPdfGenerator
         }
     }
 
+    private sealed class SlateCvDocument : CvDocumentBase
+    {
+        public SlateCvDocument(CvDraft draft, CvTemplateDefinition template) : base(draft, template) { }
+
+        public override void Compose(IDocumentContainer container)
+        {
+            container.Page(page =>
+            {
+                page.Size(PageSizes.A4);
+                page.Margin(28);
+                page.DefaultTextStyle(x => x.FontFamily("Segoe UI").FontSize(9.5f));
+                page.Content().Column(column =>
+                {
+                    column.Spacing(10);
+                    column.Item().Background(Colors.Grey.Lighten4).Padding(12).Row(row =>
+                    {
+                        row.RelativeItem().Column(header =>
+                        {
+                            if (!string.IsNullOrWhiteSpace(Draft.FullName))
+                            {
+                                header.Item().Text(Draft.FullName).FontSize(18).SemiBold();
+                            }
+                            if (!string.IsNullOrWhiteSpace(Draft.Headline ?? Draft.RoleTarget))
+                            {
+                                header.Item().Text(Safe(Draft.Headline ?? Draft.RoleTarget)).FontColor(Colors.Grey.Darken1);
+                            }
+                        });
+
+                        if (HasContactInfo(Draft.Contact))
+                        {
+                            row.ConstantItem(190).Column(contact =>
+                            {
+                                contact.Spacing(2);
+                                foreach (var entry in BuildContactEntries(Draft.Contact))
+                                {
+                                    if (!string.IsNullOrWhiteSpace(entry.Url))
+                                    {
+                                        var linkItem = contact.Item();
+                                        linkItem.Hyperlink(entry.Url);
+                                        linkItem.Text(entry.Label).FontSize(9).FontColor(Colors.Blue.Darken2);
+                                    }
+                                    else
+                                    {
+                                        contact.Item().Text(entry.Label).FontSize(9);
+                                    }
+                                }
+                            });
+                        }
+                    });
+
+                    column.Item().Row(row =>
+                    {
+                        row.ConstantItem(170).Column(sidebar =>
+                        {
+                            sidebar.Spacing(8);
+                            if (HasItems(Draft.SkillGroups) || HasItems(Draft.Skills))
+                            {
+                                SectionTitle(sidebar, "Skills", Template.AccentHex);
+                                if (HasItems(Draft.SkillGroups))
+                                {
+                                    foreach (var group in Draft.SkillGroups)
+                                    {
+                                        var groupItems = string.Join(", ", group.Items);
+                                        var label = string.IsNullOrWhiteSpace(group.Name) ? groupItems : $"{group.Name}: {groupItems}";
+                                        sidebar.Item().Text(label).FontSize(9.2f);
+                                    }
+                                }
+                                else
+                                {
+                                    sidebar.Item().Text(string.Join(", ", Draft.Skills)).FontSize(9.2f);
+                                }
+                            }
+
+                            if (HasItems(Draft.Certifications))
+                            {
+                                SectionTitle(sidebar, "Certifications", Template.AccentHex);
+                                foreach (var cert in Draft.Certifications)
+                                {
+                                    sidebar.Item().Text($"{Safe(cert.Name)} - {Safe(cert.Issuer)}").FontSize(9.2f);
+                                }
+                            }
+                        });
+
+                        row.RelativeItem().PaddingLeft(16).Column(main =>
+                        {
+                            main.Spacing(8);
+                            if (!string.IsNullOrWhiteSpace(Draft.Summary))
+                            {
+                                SectionTitle(main, "Profile", Template.AccentHex);
+                                main.Item().Text(Draft.Summary).FontSize(9.5f);
+                            }
+
+                            if (HasItems(Draft.Experiences))
+                            {
+                                SectionTitle(main, "Experience", Template.AccentHex);
+                                foreach (var exp in Draft.Experiences)
+                                {
+                                    main.Item().Text($"{Safe(exp.Title)} - {Safe(exp.Company)}").SemiBold();
+                                    main.Item().Text($"{Safe(exp.StartDate)} - {Safe(exp.EndDate, "Present")} - {Safe(exp.Location)}")
+                                        .FontColor(Colors.Grey.Darken1).FontSize(9);
+                                    if (HasItems(exp.Highlights))
+                                    {
+                                        BulletList(main, exp.Highlights);
+                                    }
+                                }
+                            }
+
+                            if (HasItems(Draft.Projects))
+                            {
+                                SectionTitle(main, "Projects", Template.AccentHex);
+                                foreach (var project in Draft.Projects)
+                                {
+                                    main.Item().Text(Safe(project.Name)).SemiBold();
+                                    if (!string.IsNullOrWhiteSpace(project.Link))
+                                    {
+                                        var linkItem = main.Item();
+                                        linkItem.Hyperlink(NormalizeUrl(project.Link));
+                                        linkItem.Text(project.Link).FontColor(Colors.Blue.Darken2).FontSize(9);
+                                    }
+                                    main.Item().Text(Safe(project.Description)).FontSize(9.5f);
+                                }
+                            }
+
+                            if (HasItems(Draft.Education))
+                            {
+                                SectionTitle(main, "Education", Template.AccentHex);
+                                foreach (var edu in Draft.Education)
+                                {
+                                    main.Item().Text($"{Safe(edu.Degree)} - {Safe(edu.Institution)}").SemiBold();
+                                    main.Item().Text($"{Safe(edu.StartDate)} - {Safe(edu.EndDate)} - {Safe(edu.Location)}")
+                                        .FontColor(Colors.Grey.Darken1).FontSize(9);
+                                }
+                            }
+                        });
+                    });
+                });
+            });
+        }
+    }
+
+    private sealed class ZenCvDocument : CvDocumentBase
+    {
+        public ZenCvDocument(CvDraft draft, CvTemplateDefinition template) : base(draft, template) { }
+
+        public override void Compose(IDocumentContainer container)
+        {
+            container.Page(page =>
+            {
+                page.Size(PageSizes.A4);
+                page.Margin(32);
+                page.DefaultTextStyle(x => x.FontFamily("Palatino Linotype").FontSize(9.5f));
+                page.Content().Column(column =>
+                {
+                    column.Spacing(10);
+                    if (!string.IsNullOrWhiteSpace(Draft.FullName))
+                    {
+                        column.Item().AlignCenter().Text(Draft.FullName).FontSize(20).SemiBold();
+                    }
+                    if (!string.IsNullOrWhiteSpace(Draft.Headline ?? Draft.RoleTarget))
+                    {
+                        column.Item().AlignCenter().Text(Safe(Draft.Headline ?? Draft.RoleTarget)).FontColor(Colors.Grey.Darken1);
+                    }
+
+                    if (HasContactInfo(Draft.Contact))
+                    {
+                        var entries = BuildContactEntries(Draft.Contact).ToList();
+                        if (entries.Count > 0)
+                        {
+                            column.Item().AlignCenter().Column(contact =>
+                            {
+                                contact.Spacing(2);
+                                foreach (var entry in entries)
+                                {
+                                    if (!string.IsNullOrWhiteSpace(entry.Url))
+                                    {
+                                        var linkItem = contact.Item();
+                                        linkItem.Hyperlink(entry.Url);
+                                        linkItem.Text(entry.Label).FontSize(9.2f).FontColor(Colors.Grey.Darken2);
+                                    }
+                                    else
+                                    {
+                                        contact.Item().Text(entry.Label).FontSize(9.2f).FontColor(Colors.Grey.Darken2);
+                                    }
+                                }
+                            });
+                        }
+                    }
+
+                    column.Item().LineHorizontal(1).LineColor(Template.AccentHex);
+
+                    if (!string.IsNullOrWhiteSpace(Draft.Summary))
+                    {
+                        SectionTitle(column, "Summary", Template.AccentHex);
+                        column.Item().Text(Draft.Summary).FontSize(9.5f);
+                    }
+
+                    if (HasItems(Draft.Experiences))
+                    {
+                        SectionTitle(column, "Experience", Template.AccentHex);
+                        foreach (var exp in Draft.Experiences)
+                        {
+                            column.Item().Text($"{Safe(exp.Title)} - {Safe(exp.Company)}").SemiBold();
+                            column.Item().Text($"{Safe(exp.StartDate)} - {Safe(exp.EndDate, "Present")} - {Safe(exp.Location)}")
+                                .FontColor(Colors.Grey.Darken1).FontSize(9);
+                            if (HasItems(exp.Highlights))
+                            {
+                                BulletList(column, exp.Highlights);
+                            }
+                        }
+                    }
+
+                    if (HasItems(Draft.Projects))
+                    {
+                        SectionTitle(column, "Projects", Template.AccentHex);
+                        foreach (var project in Draft.Projects)
+                        {
+                            column.Item().Text(Safe(project.Name)).SemiBold();
+                            if (!string.IsNullOrWhiteSpace(project.Link))
+                            {
+                                var linkItem = column.Item();
+                                linkItem.Hyperlink(NormalizeUrl(project.Link));
+                                linkItem.Text(project.Link).FontColor(Colors.Blue.Darken2).FontSize(9);
+                            }
+                            column.Item().Text(Safe(project.Description)).FontSize(9.5f);
+                        }
+                    }
+
+                    if (HasItems(Draft.SkillGroups) || HasItems(Draft.Skills))
+                    {
+                        SectionTitle(column, "Skills", Template.AccentHex);
+                        if (HasItems(Draft.SkillGroups))
+                        {
+                            foreach (var group in Draft.SkillGroups)
+                            {
+                                var groupItems = string.Join(", ", group.Items);
+                                var label = string.IsNullOrWhiteSpace(group.Name) ? groupItems : $"{group.Name}: {groupItems}";
+                                column.Item().Text(label);
+                            }
+                        }
+                        else
+                        {
+                            column.Item().Text(string.Join(", ", Draft.Skills));
+                        }
+                    }
+
+                    if (HasItems(Draft.Education))
+                    {
+                        SectionTitle(column, "Education", Template.AccentHex);
+                        foreach (var edu in Draft.Education)
+                        {
+                            column.Item().Text($"{Safe(edu.Degree)} - {Safe(edu.Institution)}").SemiBold();
+                            column.Item().Text($"{Safe(edu.StartDate)} - {Safe(edu.EndDate)}")
+                                .FontColor(Colors.Grey.Darken1).FontSize(9);
+                        }
+                    }
+                });
+            });
+        }
+    }
+
     private sealed class MinimalCvDocument : CvDocumentBase
     {
         public MinimalCvDocument(CvDraft draft, CvTemplateDefinition template) : base(draft, template) { }
@@ -278,7 +560,10 @@ public sealed class CvPdfGenerator
                 page.Content().Column(column =>
                 {
                     column.Spacing(10);
-                    column.Item().Text(Safe(Draft.FullName, "Resume Draft")).FontSize(22).SemiBold();
+                    if (!string.IsNullOrWhiteSpace(Draft.FullName))
+                    {
+                        column.Item().Text(Draft.FullName).FontSize(22).SemiBold();
+                    }
                     if (!string.IsNullOrWhiteSpace(Draft.Headline ?? Draft.RoleTarget))
                     {
                         column.Item().Text(Safe(Draft.Headline ?? Draft.RoleTarget)).FontColor(Colors.Grey.Darken1);
@@ -288,25 +573,20 @@ public sealed class CvPdfGenerator
                         var entries = BuildContactEntries(Draft.Contact).ToList();
                         if (entries.Count > 0)
                         {
-                            column.Item().Row(row =>
+                            column.Item().Column(contact =>
                             {
-                                for (var i = 0; i < entries.Count; i++)
+                                contact.Spacing(2);
+                                foreach (var entry in entries)
                                 {
-                                    var entry = entries[i];
                                     if (!string.IsNullOrWhiteSpace(entry.Url))
                                     {
-                                        var linkItem = row.AutoItem();
+                                        var linkItem = contact.Item();
                                         linkItem.Hyperlink(entry.Url);
                                         linkItem.Text(entry.Label).FontColor(Colors.Grey.Darken2).FontSize(9.5f);
                                     }
                                     else
                                     {
-                                        row.AutoItem().Text(entry.Label).FontColor(Colors.Grey.Darken2).FontSize(9.5f);
-                                    }
-
-                                    if (i < entries.Count - 1)
-                                    {
-                                        row.AutoItem().Text(" | ").FontColor(Colors.Grey.Darken2).FontSize(9.5f);
+                                        contact.Item().Text(entry.Label).FontColor(Colors.Grey.Darken2).FontSize(9.5f);
                                     }
                                 }
                             });
@@ -406,7 +686,10 @@ public sealed class CvPdfGenerator
                     {
                         row.RelativeItem().Column(header =>
                         {
-                            header.Item().Text(Safe(Draft.FullName, "Resume Draft")).FontSize(20).SemiBold();
+                            if (!string.IsNullOrWhiteSpace(Draft.FullName))
+                            {
+                                header.Item().Text(Draft.FullName).FontSize(20).SemiBold();
+                            }
                             header.Item().Text(Safe(Draft.Headline ?? Draft.RoleTarget)).FontColor(Colors.Grey.Darken1);
                         });
                         if (HasContactInfo(Draft.Contact))
@@ -511,6 +794,145 @@ public sealed class CvPdfGenerator
                                 {
                                     right.Item().Text($"{Safe(edu.Degree)} - {Safe(edu.Institution)}").SemiBold();
                                     right.Item().Text($"{Safe(edu.StartDate)} - {Safe(edu.EndDate)}").FontColor(Colors.Grey.Darken1).FontSize(9);
+                                }
+                            }
+                        });
+                    });
+                });
+            });
+        }
+    }
+
+    private sealed class AtlasCvDocument : CvDocumentBase
+    {
+        public AtlasCvDocument(CvDraft draft, CvTemplateDefinition template) : base(draft, template) { }
+
+        public override void Compose(IDocumentContainer container)
+        {
+            container.Page(page =>
+            {
+                page.Size(PageSizes.A4);
+                page.Margin(32);
+                page.DefaultTextStyle(x => x.FontFamily("Cambria").FontSize(9.5f));
+                page.Content().Column(column =>
+                {
+                    column.Spacing(12);
+                    column.Item().Row(row =>
+                    {
+                        row.RelativeItem().Column(header =>
+                        {
+                            if (!string.IsNullOrWhiteSpace(Draft.FullName))
+                            {
+                                header.Item().Text(Draft.FullName).FontSize(20).SemiBold();
+                            }
+                            header.Item().Text(Safe(Draft.Headline ?? Draft.RoleTarget)).FontColor(Colors.Grey.Darken1);
+                        });
+
+                        if (HasContactInfo(Draft.Contact))
+                        {
+                            row.ConstantItem(200).Column(contact =>
+                            {
+                                contact.Spacing(2);
+                                foreach (var entry in BuildContactEntries(Draft.Contact))
+                                {
+                                    if (!string.IsNullOrWhiteSpace(entry.Url))
+                                    {
+                                        var linkItem = contact.Item();
+                                        linkItem.Hyperlink(entry.Url);
+                                        linkItem.Text(entry.Label).FontSize(9.2f);
+                                    }
+                                    else
+                                    {
+                                        contact.Item().Text(entry.Label).FontSize(9.2f);
+                                    }
+                                }
+                            });
+                        }
+                    });
+
+                    column.Item().LineHorizontal(1).LineColor(Template.AccentHex);
+
+                    column.Item().Row(row =>
+                    {
+                        row.RelativeItem().Column(main =>
+                        {
+                            main.Spacing(6);
+                            if (!string.IsNullOrWhiteSpace(Draft.Summary))
+                            {
+                                SectionTitle(main, "Summary", Template.AccentHex);
+                                main.Item().Text(Draft.Summary).FontSize(9.5f);
+                            }
+
+                            if (HasItems(Draft.Experiences))
+                            {
+                                SectionTitle(main, "Experience", Template.AccentHex);
+                                foreach (var exp in Draft.Experiences)
+                                {
+                                    main.Item().Text($"{Safe(exp.Title)} - {Safe(exp.Company)}").SemiBold();
+                                    main.Item().Text($"{Safe(exp.StartDate)} - {Safe(exp.EndDate, "Present")}")
+                                        .FontColor(Colors.Grey.Darken1).FontSize(9);
+                                    if (HasItems(exp.Highlights))
+                                    {
+                                        BulletList(main, exp.Highlights);
+                                    }
+                                }
+                            }
+
+                            if (HasItems(Draft.Projects))
+                            {
+                                SectionTitle(main, "Projects", Template.AccentHex);
+                                foreach (var project in Draft.Projects)
+                                {
+                                    main.Item().Text(Safe(project.Name)).SemiBold();
+                                    if (!string.IsNullOrWhiteSpace(project.Link))
+                                    {
+                                        var linkItem = main.Item();
+                                        linkItem.Hyperlink(NormalizeUrl(project.Link));
+                                        linkItem.Text(project.Link).FontColor(Colors.Blue.Darken2).FontSize(9);
+                                    }
+                                    main.Item().Text(Safe(project.Description)).FontSize(9.5f);
+                                }
+                            }
+                        });
+
+                        row.ConstantItem(180).PaddingLeft(16).Column(side =>
+                        {
+                            side.Spacing(6);
+                            if (HasItems(Draft.SkillGroups) || HasItems(Draft.Skills))
+                            {
+                                SectionTitle(side, "Skills", Template.AccentHex);
+                                if (HasItems(Draft.SkillGroups))
+                                {
+                                    foreach (var group in Draft.SkillGroups)
+                                    {
+                                        var groupItems = string.Join(", ", group.Items);
+                                        var label = string.IsNullOrWhiteSpace(group.Name) ? groupItems : $"{group.Name}: {groupItems}";
+                                        side.Item().Text(label);
+                                    }
+                                }
+                                else
+                                {
+                                    side.Item().Text(string.Join(", ", Draft.Skills));
+                                }
+                            }
+
+                            if (HasItems(Draft.Education))
+                            {
+                                SectionTitle(side, "Education", Template.AccentHex);
+                                foreach (var edu in Draft.Education)
+                                {
+                                    side.Item().Text($"{Safe(edu.Degree)} - {Safe(edu.Institution)}").SemiBold();
+                                    side.Item().Text($"{Safe(edu.StartDate)} - {Safe(edu.EndDate)}")
+                                        .FontColor(Colors.Grey.Darken1).FontSize(9);
+                                }
+                            }
+
+                            if (HasItems(Draft.Certifications))
+                            {
+                                SectionTitle(side, "Certifications", Template.AccentHex);
+                                foreach (var cert in Draft.Certifications)
+                                {
+                                    side.Item().Text($"{Safe(cert.Name)} - {Safe(cert.Issuer)}").FontSize(9.2f);
                                 }
                             }
                         });

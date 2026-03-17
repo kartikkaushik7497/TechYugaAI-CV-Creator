@@ -12,6 +12,7 @@
 .cv-executive-header {
     display: flex;
     justify-content: space-between;
+    align-items: flex-start;
     gap: 1.5rem;
     border-bottom: 2px solid var(--cv-accent);
     padding-bottom: 1rem;
@@ -31,9 +32,11 @@
 .cv-contact-stack {
     font-size: 0.8rem;
     color: #4b5563;
-    display: grid;
-    gap: 0.25rem;
-    text-align: right;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    align-items: flex-end;
+    line-height: 1.25;
 }
 
 .cv-executive-body {
@@ -43,8 +46,8 @@
 }
 
 .cv-template-executive .cv-block-title {
-    font-size: 0.8rem;
-    font-weight: 600;
+    font-size: 1.15rem;
+    font-weight: 700;
     color: var(--cv-accent);
     margin-bottom: 0.5rem;
 }
@@ -60,7 +63,7 @@
 }
 
 .cv-template-executive .cv-item-meta {
-    font-size: 0.75rem;
+    font-size: 0.82rem;
     color: #6b7280;
 }
 
@@ -84,4 +87,19 @@
     color: inherit;
     text-decoration: underline;
     text-decoration-color: rgba(148, 163, 184, 0.8);
+}
+
+@media (max-width: 720px) {
+    .cv-executive-header {
+        flex-direction: column;
+    }
+
+    .cv-contact-stack {
+        text-align: left;
+        align-items: flex-start;
+    }
+
+    .cv-executive-body {
+        grid-template-columns: 1fr;
+    }
 }

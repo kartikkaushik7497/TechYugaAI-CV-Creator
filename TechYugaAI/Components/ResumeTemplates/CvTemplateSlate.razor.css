@@ -1,0 +1,118 @@
+.cv-template-slate {
+    font-family: "Segoe UI", "Arial", sans-serif;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.75rem;
+    background: #ffffff;
+    width: 100%;
+    overflow: hidden;
+}
+
+.cv-slate-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 1.5rem;
+    padding: 1.5rem;
+    background: linear-gradient(120deg, rgba(30, 58, 138, 0.12), rgba(255, 255, 255, 0.9));
+    border-bottom: 2px solid var(--cv-accent);
+}
+
+.cv-template-slate .cv-name {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.cv-template-slate .cv-headline {
+    font-size: 0.98rem;
+    color: #475569;
+}
+
+.cv-slate-contact {
+    font-size: 0.85rem;
+    color: #1f2937;
+    display: grid;
+    gap: 0.3rem;
+    text-align: right;
+}
+
+.cv-slate-body {
+    display: grid;
+    grid-template-columns: 1fr 2fr;
+    gap: 1.5rem;
+    padding: 1.5rem;
+}
+
+.cv-slate-sidebar {
+    background: #f8fafc;
+    border-radius: 0.75rem;
+    padding: 1rem;
+    display: grid;
+    gap: 1rem;
+    border: 1px solid #e5e7eb;
+}
+
+.cv-slate-main {
+    display: grid;
+    gap: 1.25rem;
+}
+
+.cv-template-slate .cv-block-title {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--cv-accent);
+    border-bottom: 1px solid var(--cv-accent);
+    padding-bottom: 0.3rem;
+}
+
+.cv-template-slate .cv-item {
+    display: grid;
+    gap: 0.35rem;
+    font-size: 0.9rem;
+}
+
+.cv-template-slate .cv-item-header {
+    font-weight: 600;
+}
+
+.cv-template-slate .cv-item-meta {
+    font-size: 0.82rem;
+    color: #64748b;
+}
+
+.cv-template-slate ul {
+    padding-left: 0;
+    list-style: none;
+    font-size: 0.85rem;
+    color: #374151;
+}
+
+.cv-template-slate li::before {
+    content: "- ";
+    color: #6b7280;
+}
+
+.cv-template-slate .cv-skill-items {
+    font-size: 0.85rem;
+    color: #1f2937;
+}
+
+.cv-link {
+    color: inherit;
+    text-decoration: underline;
+    text-decoration-color: rgba(148, 163, 184, 0.8);
+}
+
+@media (max-width: 720px) {
+    .cv-slate-body {
+        grid-template-columns: 1fr;
+    }
+
+    .cv-slate-header {
+        flex-direction: column;
+        text-align: left;
+    }
+
+    .cv-slate-contact {
+        text-align: left;
+    }
+}

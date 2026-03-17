@@ -1,6 +1,7 @@
 ﻿.message-list-container {
     margin: 2rem 1.5rem;
     flex-grow: 1;
+    overflow-x: hidden;
 }
 
 .message-list {

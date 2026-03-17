@@ -16,14 +16,20 @@ else
     @switch (TemplateId)
     {
         case CvTemplateRegistry.MinimalId:
-        case CvTemplateRegistry.ZenId:
             <CvTemplateMinimal Draft="@Draft" AccentHex="@template.AccentHex" />
             break;
+        case CvTemplateRegistry.ZenId:
+            <CvTemplateZen Draft="@Draft" AccentHex="@template.AccentHex" />
+            break;
         case CvTemplateRegistry.ExecutiveId:
-        case CvTemplateRegistry.AtlasId:
             <CvTemplateExecutive Draft="@Draft" AccentHex="@template.AccentHex" />
             break;
+        case CvTemplateRegistry.AtlasId:
+            <CvTemplateAtlas Draft="@Draft" AccentHex="@template.AccentHex" />
+            break;
         case CvTemplateRegistry.SlateId:
+            <CvTemplateSlate Draft="@Draft" AccentHex="@template.AccentHex" />
+            break;
         default:
             <CvTemplateModern Draft="@Draft" AccentHex="@template.AccentHex" />
             break;

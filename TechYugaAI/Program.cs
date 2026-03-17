@@ -19,14 +19,18 @@ builder.Services.AddRazorComponents().AddInteractiveServerComponents();
 var token = builder.Configuration["GitHubModels:Token"] ?? throw new InvalidOperationException("Missing GitHubModels:Token");
 var credential = new ApiKeyCredential(token);
 
+var endpoint = builder.Configuration["GitHubModels:Endpoint"] ?? "https://models.inference.ai.azure.com";
 var openAIOptions = new OpenAIClientOptions()
 {
-    Endpoint = new Uri("https://models.inference.ai.azure.com")
+    Endpoint = new Uri(endpoint),
+    NetworkTimeout = TimeSpan.FromMinutes(4)
 };
 
 var ghModelsClient = new OpenAIClient(credential, openAIOptions);
-var chatClient = ghModelsClient.GetChatClient("gpt-4o-mini").AsIChatClient();
-var embeddingGenerator = ghModelsClient.GetEmbeddingClient("text-embedding-3-small").AsIEmbeddingGenerator();
+var chatModel = builder.Configuration["GitHubModels:ChatModel"] ?? "gpt-4o-mini";
+var embeddingModel = builder.Configuration["GitHubModels:EmbeddingModel"] ?? "text-embedding-3-small";
+var chatClient = ghModelsClient.GetChatClient(chatModel).AsIChatClient();
+var embeddingGenerator = ghModelsClient.GetEmbeddingClient(embeddingModel).AsIEmbeddingGenerator();
 
 var vectorStorePath = Path.Combine(AppContext.BaseDirectory, "vector-store.db");
 var vectorStoreConnectionString = $"Data Source={vectorStorePath}";

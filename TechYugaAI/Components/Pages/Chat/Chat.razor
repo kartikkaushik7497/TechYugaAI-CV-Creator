@@ -1,7 +1,9 @@
 @page "/"
 @using System.ComponentModel
 @using System.Text
+@using System.Text.Json
 @using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.JSInterop
 @using UglyToad.PdfPig
 @using TechYugaAI.Models
 @using TechYugaAI.Services
@@ -10,6 +12,7 @@
 @inject CvDraftState CvDraftState
 @inject CvTemplateRegistry TemplateRegistry
 @inject TechYugaAgentTools AgentTools
+@inject IJSRuntime JS
 @implements IDisposable
 
 <PageTitle>TechYugaAI - @currentMode.ToString()</PageTitle>
@@ -22,7 +25,10 @@
     <button class="btn @(currentMode == TechYugaMode.ProjectProposal ? "btn-primary" : "btn-outline-primary")" @onclick="() => SwitchMode(TechYugaMode.ProjectProposal)">Proposals</button>
 </div>
 
-<ChatHeader OnNewChat="@NewChatAsync" />
+@if (currentMode != TechYugaMode.CVCreator)
+{
+    <ChatHeader OnNewChat="@NewChatAsync" />
+}
 
 @if (currentMode == TechYugaMode.CVCreator)
 {
@@ -48,7 +54,7 @@
                         <div class="cv-step">3. Generate CV</div>
                     </div>
                     <div class="cv-prompt-title">Prompt + Job Description</div>
-                    <p class="cv-hint">Provide a role prompt and full job description/requirements. The assistant will generate a complete, ATS-optimized resume.</p>
+                    <p class="cv-hint">Provide a single prompt that includes job description, skills, experience required, and expectations. The assistant will generate a complete, ATS-optimized resume.</p>
 
                     @if (PromptWarnings.Count > 0)
                     {
@@ -64,9 +70,7 @@
                     }
 
                     <label class="cv-field-label">Prompt *</label>
-                    <textarea class="cv-textarea" @bind="hrPrompt" @bind:event="oninput" rows="3" placeholder="Please generate a professional, ATS-optimized, one-page resume for a React Developer with 4 years of experience."></textarea>
-                    <label class="cv-field-label">Job Description + Requirements *</label>
-                    <textarea class="cv-textarea" @bind="hrJobDescription" @bind:event="oninput" rows="4" placeholder="Paste the job description, required skills, and experience expectations here."></textarea>
+                    <textarea class="cv-textarea" @bind="hrJobDescription" @bind:event="oninput" rows="6" placeholder="Include job description, skills, experience required, and any other expectations here."></textarea>
                     <div class="cv-prompt-actions">
                         <button class="btn btn-primary" @onclick="GenerateFromPromptAsync">Generate CV</button>
                     </div>
@@ -88,7 +92,7 @@
                         <div class="cv-step">4. Generate CV</div>
                     </div>
                     <div class="cv-prompt-title">Resume Upgrade (PDF)</div>
-                    <p class="cv-hint">Upload an existing resume PDF and provide a target role prompt plus JD/requirements. The assistant will rewrite and optimize the CV.</p>
+                    <p class="cv-hint">Upload an existing resume PDF and provide a single prompt with job description, skills, experience required, and expectations. The assistant will rewrite and optimize the CV.</p>
 
                     @if (!string.IsNullOrWhiteSpace(uploadError))
                     {
@@ -109,7 +113,15 @@
                     }
 
                     <label class="cv-field-label">Upload Resume PDF *</label>
-                    <InputFile OnChange="HandleResumeUploadAsync" accept=".pdf" class="cv-file-input" />
+                    <div class="cv-upload-row">
+                        <label class="cv-upload-btn" for="resumeUploadInput">
+                            <span>Upload Resume File</span>
+                        </label>
+                        <InputFile id="resumeUploadInput" OnChange="HandleResumeUploadAsync" accept=".pdf" class="cv-file-input" style="display:none" />
+                        <div class="cv-upload-name @(string.IsNullOrWhiteSpace(uploadedResumeFileName) ? "muted" : "selected")">
+                            @(!string.IsNullOrWhiteSpace(uploadedResumeFileName) ? uploadedResumeFileName : "No file selected")
+                        </div>
+                    </div>
                     @if (uploadInProgress)
                     {
                         <div class="cv-upload-status">Extracting text from PDF...</div>
@@ -120,9 +132,7 @@
                     }
 
                     <label class="cv-field-label">Prompt *</label>
-                    <textarea class="cv-textarea" @bind="uploadPrompt" @bind:event="oninput" rows="3" placeholder="Improve this resume for a Senior React Developer role with 4 years of experience."></textarea>
-                    <label class="cv-field-label">Job Description + Requirements *</label>
-                    <textarea class="cv-textarea" @bind="uploadJobDescription" @bind:event="oninput" rows="4" placeholder="Paste the job description, required skills, and experience expectations here."></textarea>
+                    <textarea class="cv-textarea" @bind="uploadJobDescription" @bind:event="oninput" rows="6" placeholder="Include job description, skills, experience required, and any other expectations here."></textarea>
                     <div class="cv-prompt-actions">
                         <button class="btn btn-primary" @onclick="GenerateFromUploadAsync">Improve Resume</button>
                     </div>
@@ -155,8 +165,8 @@
             </ChatMessageList>
 
             <div class="chat-container">
-                <ChatSuggestions OnSelected="@AddUserMessageAsync" @ref="@chatSuggestions" />
-                <ChatInput OnSend="@AddUserMessageAsync" @ref="@chatInput" />
+                <ChatSuggestions OnSelected="@AddUserMessageFromInputAsync" @ref="@chatSuggestions" />
+                <ChatInput OnSend="@AddUserMessageFromInputAsync" @ref="@chatInput" />
             </div>
         </div>
 
@@ -209,8 +219,8 @@ else
     </ChatMessageList>
 
     <div class="chat-container">
-        <ChatSuggestions OnSelected="@AddUserMessageAsync" @ref="@chatSuggestions" />
-        <ChatInput OnSend="@AddUserMessageAsync" @ref="@chatInput" />
+        <ChatSuggestions OnSelected="@AddUserMessageFromInputAsync" @ref="@chatSuggestions" />
+        <ChatInput OnSend="@AddUserMessageFromInputAsync" @ref="@chatInput" />
     </div>
 }
 
@@ -223,12 +233,12 @@ else
     }
 
     private const long MaxUploadBytes = 10 * 1024 * 1024;
+    private const int MaxResumeChars = 12000;
+    private const int MaxResumePages = 6;
 
     private TechYugaMode currentMode = TechYugaMode.General;
     private CvWorkflowTab currentCvTab = CvWorkflowTab.Guided;
-    private string? hrPrompt;
     private string? hrJobDescription;
-    private string? uploadPrompt;
     private string? uploadJobDescription;
     private string? uploadedResumeText;
     private string? uploadedResumeFileName;
@@ -240,6 +250,11 @@ else
 
     private int statefulMessageCount;
     private readonly ChatOptions chatOptions = new();
+    private static readonly JsonSerializerOptions DraftJsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
+    };
     private readonly List<ChatMessage> messages = new();
     private CancellationTokenSource? currentResponseCancellation;
     private ChatMessage? currentResponseMessage;
@@ -290,6 +305,7 @@ else
                     {jsonSchema}
                     Always call UpdateCvDraft after every user response that provides new information.
                     Provide a complete JSON draft that retains any previously known data. Do not clear fields unless instructed.
+                    If the user asks to remove or clear a section, set the corresponding string to "" or array to [].
                     When the user asks to generate a PDF, call GenerateCVDoc with templateId and the full cvJson draft.
                     """;
             }
@@ -298,22 +314,27 @@ else
             {
                 return $"""
                     You are the TechYuga CV Enhancer (Resume Upload Mode). You will receive resume text extracted from a PDF,
-                    plus a target role prompt and full job description/requirements. Rewrite and optimize the resume for ATS,
+                    plus a prompt containing job description, skills, experience required, and expectations. Rewrite and optimize the resume for ATS,
                     ensure strong impact statements, and fill missing sections if possible without inventing facts.
                     Available templates: {templateList}. Use the selected template ID when generating PDFs.
                     {jsonSchema}
                     First call UpdateCvDraft with the full JSON draft. Then respond with a short summary and ask for edits.
                     When the user requests the final PDF, call GenerateCVDoc with templateId and the full cvJson draft.
+                    If the user indicates no experience is required, do not include any Experience entries and set yearsOfExperience to "0".
+                    If the user asks to remove or clear a section, set the corresponding string to "" or array to [].
                     """;
             }
 
             return $"""
-                You are the TechYuga CV Generator (Prompt + Job Description Mode). Use the provided prompt and
-                job description/requirements to generate a complete, ATS-optimized, one-page resume. Populate all relevant sections.
+                You are the TechYuga CV Generator (Prompt Mode). Use the provided prompt (job description, skills, experience required, expectations)
+                to generate a complete, ATS-optimized, one-page resume.
+                Populate all relevant sections without inventing facts.
                 Available templates: {templateList}. Use the selected template ID when generating PDFs.
                 {jsonSchema}
                 First call UpdateCvDraft with the full JSON draft. Then respond with a short summary and ask if edits are needed.
                 When the user requests the final PDF, call GenerateCVDoc with templateId and the full cvJson draft.
+                If the user indicates no experience is required, do not include any Experience entries and set yearsOfExperience to "0".
+                If the user asks to remove or clear a section, set the corresponding string to "" or array to [].
                 """;
         }
 
@@ -360,59 +381,123 @@ else
 
     private async Task GenerateFromPromptAsync()
     {
-        promptAttempted = true;
-        if (!IsPromptReady)
+        try
         {
-            return;
+            promptAttempted = true;
+            if (!IsPromptReady)
+            {
+                await ShowValidationAlertAsync(BuildPromptWarnings());
+                return;
+            }
+
+            var template = TemplateRegistry.Get(CvDraftState.SelectedTemplateId);
+            var builder = new StringBuilder();
+            builder.AppendLine("Generate a professional, ATS-optimized resume using the following inputs.");
+            builder.AppendLine();
+            builder.AppendLine("Prompt (job description + skills + experience + expectations):");
+            builder.AppendLine(hrJobDescription!.Trim());
+            builder.AppendLine();
+            builder.AppendLine($"Template preference: {template.Name} ({template.Id}).");
+            builder.AppendLine("Return structured data via UpdateCvDraft.");
+            builder.AppendLine("Important: Do not invent experience if the prompt says no experience required.");
+            builder.AppendLine("If no experience is required, set yearsOfExperience to \"0\" and keep experiences empty.");
+            if (IndicatesNoExperience(hrJobDescription))
+            {
+                builder.AppendLine("Constraint: No professional experience required. Do not include any Experience entries.");
+            }
+            if (HasExistingDraftData())
+            {
+                builder.AppendLine("Update the existing draft with these changes and replace any conflicting sections.");
+            }
+
+            var displayMessage = new ChatMessage(ChatRole.User, "Generate resume/CV from the provided prompt.");
+            var aiMessage = new ChatMessage(ChatRole.User, builder.ToString());
+            await AddUserMessageAsync(
+                displayMessage,
+                aiUserMessage: aiMessage,
+                forceFreshContext: true,
+                suppressAssistantText: true,
+                inProgressLabel: "Generating resume/CV...",
+                completionLabel: "Resume/CV generated. Preview updated.");
         }
-
-        var template = TemplateRegistry.Get(CvDraftState.SelectedTemplateId);
-        var builder = new StringBuilder();
-        builder.AppendLine("Generate a professional, ATS-optimized resume using the following prompt:");
-        builder.AppendLine(hrPrompt!.Trim());
-        builder.AppendLine();
-        builder.AppendLine("Job Description and Requirements:");
-        builder.AppendLine(hrJobDescription!.Trim());
-        builder.AppendLine();
-        builder.AppendLine($"Template preference: {template.Name} ({template.Id}).");
-        builder.AppendLine("Return structured data via UpdateCvDraft.");
-
-        await AddUserMessageAsync(new(ChatRole.User, builder.ToString()));
+        catch (Exception ex)
+        {
+            AddLocalErrorMessage(ex);
+        }
     }
 
     private async Task GenerateFromUploadAsync()
     {
-        uploadAttempted = true;
-        if (!IsUploadReady)
+        try
         {
-            return;
+            uploadAttempted = true;
+            if (!IsUploadReady)
+            {
+                await ShowValidationAlertAsync(BuildUploadWarnings());
+                return;
+            }
+
+            var template = TemplateRegistry.Get(CvDraftState.SelectedTemplateId);
+            var builder = new StringBuilder();
+            builder.AppendLine("Improve and rewrite this resume based on the target role and job description.");
+            builder.AppendLine();
+            builder.AppendLine("Prompt (job description + skills + experience + expectations):");
+            builder.AppendLine(uploadJobDescription!.Trim());
+            builder.AppendLine();
+            builder.AppendLine("Resume Text (from PDF):");
+            builder.AppendLine(uploadedResumeText!.Trim());
+            builder.AppendLine();
+            builder.AppendLine($"Template preference: {template.Name} ({template.Id}).");
+            builder.AppendLine("Return structured data via UpdateCvDraft.");
+            builder.AppendLine("Important: Do not invent experience if the prompt says no experience required.");
+            builder.AppendLine("If no experience is required, set yearsOfExperience to \"0\" and keep experiences empty.");
+            if (IndicatesNoExperience(uploadJobDescription))
+            {
+                builder.AppendLine("Constraint: No professional experience required. Do not include any Experience entries.");
+            }
+            if (HasExistingDraftData())
+            {
+                builder.AppendLine("Update the existing draft with these changes and replace any conflicting sections.");
+            }
+
+            var displayMessage = new ChatMessage(ChatRole.User, "Improve the resume using the uploaded PDF and prompt.");
+            var aiMessage = new ChatMessage(ChatRole.User, builder.ToString());
+            await AddUserMessageAsync(
+                displayMessage,
+                aiUserMessage: aiMessage,
+                forceFreshContext: true,
+                suppressAssistantText: true,
+                inProgressLabel: "Generating resume/CV...",
+                completionLabel: "Resume/CV generated. Preview updated.");
         }
-
-        var template = TemplateRegistry.Get(CvDraftState.SelectedTemplateId);
-        var builder = new StringBuilder();
-        builder.AppendLine("Improve and rewrite this resume based on the target role and job description.");
-        builder.AppendLine();
-        builder.AppendLine("Target Role Prompt:");
-        builder.AppendLine(uploadPrompt!.Trim());
-        builder.AppendLine();
-        builder.AppendLine("Job Description and Requirements:");
-        builder.AppendLine(uploadJobDescription!.Trim());
-        builder.AppendLine();
-        builder.AppendLine("Resume Text (from PDF):");
-        builder.AppendLine(uploadedResumeText!.Trim());
-        builder.AppendLine();
-        builder.AppendLine($"Template preference: {template.Name} ({template.Id}).");
-        builder.AppendLine("Return structured data via UpdateCvDraft.");
-
-        await AddUserMessageAsync(new(ChatRole.User, builder.ToString()));
+        catch (Exception ex)
+        {
+            AddLocalErrorMessage(ex);
+        }
     }
 
-    private async Task RequestPdfGenerationAsync()
-    {
-        var template = TemplateRegistry.Get(CvDraftState.SelectedTemplateId);
-        var message = $"Please generate the final CV PDF using template {template.Name} ({template.Id}). Use GenerateCVDoc with the full cvJson draft.";
-        await AddUserMessageAsync(new(ChatRole.User, message));
-    }
+        private async Task RequestPdfGenerationAsync()
+        {
+            try
+            {
+                var template = TemplateRegistry.Get(CvDraftState.SelectedTemplateId);
+                var draftJson = JsonSerializer.Serialize(CvDraftState.Draft, DraftJsonOptions);
+                var message = $"Please generate the final CV PDF using template {template.Name} ({template.Id}). Use GenerateCVDoc with the full cvJson draft.\ncvJson:\n{draftJson}";
+                var displayMessage = new ChatMessage(ChatRole.User, "Generate the final CV PDF.");
+                var aiMessage = new ChatMessage(ChatRole.User, message);
+                await AddUserMessageAsync(
+                    displayMessage,
+                    aiUserMessage: aiMessage,
+                    forceFreshContext: true,
+                    suppressAssistantText: true,
+                    inProgressLabel: "Generating final CV PDF...",
+                    completionLabel: "PDF generation completed. Use View/Download if available.");
+            }
+            catch (Exception ex)
+            {
+                AddLocalErrorMessage(ex);
+            }
+        }
 
     private async Task HandleResumeUploadAsync(InputFileChangeEventArgs args)
     {
@@ -459,7 +544,7 @@ else
                 return;
             }
 
-            uploadedResumeText = extracted;
+            uploadedResumeText = TrimResumeText(extracted, MaxResumeChars);
         }
         catch (Exception ex)
         {
@@ -481,17 +566,38 @@ else
 
         using var document = PdfDocument.Open(pdfStream);
         var builder = new StringBuilder();
+        var pageCount = 0;
         foreach (var page in document.GetPages())
         {
+            pageCount++;
+            if (pageCount > MaxResumePages)
+            {
+                break;
+            }
             var text = page.Text;
             if (!string.IsNullOrWhiteSpace(text))
             {
                 builder.AppendLine(text.Trim());
                 builder.AppendLine();
             }
+
+            if (builder.Length >= MaxResumeChars)
+            {
+                break;
+            }
         }
 
         return builder.ToString().Trim();
+    }
+
+    private static string TrimResumeText(string text, int maxChars)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return string.Empty;
+        }
+
+        return text.Length <= maxChars ? text : text[..maxChars];
     }
 
     private async Task NewChatAsync()
@@ -499,9 +605,7 @@ else
         if (currentMode == TechYugaMode.CVCreator)
         {
             CvDraftState.Reset();
-            hrPrompt = null;
             hrJobDescription = null;
-            uploadPrompt = null;
             uploadJobDescription = null;
             uploadedResumeText = null;
             uploadedResumeFileName = null;
@@ -514,7 +618,38 @@ else
         await ResetConversationAsync();
     }
 
-    private async Task AddUserMessageAsync(ChatMessage userMessage)
+    private async Task AddUserMessageAsync(
+        ChatMessage userMessage,
+        ChatMessage? aiUserMessage = null,
+        bool forceFreshContext = false,
+        bool suppressAssistantText = false,
+        string? inProgressLabel = null,
+        string? completionLabel = null)
+    {
+        try
+        {
+            await AddUserMessageCoreAsync(userMessage, aiUserMessage, forceFreshContext, suppressAssistantText, inProgressLabel, completionLabel);
+        }
+        catch (Exception ex)
+        {
+            currentResponseCancellation?.Cancel();
+            currentResponseCancellation = null;
+            currentResponseMessage = null;
+            messages.Add(new(ChatRole.Assistant, $"[AI connection error: {ex.Message}]"));
+            chatSuggestions?.Update(messages);
+        }
+    }
+
+    private Task AddUserMessageFromInputAsync(ChatMessage userMessage)
+        => AddUserMessageAsync(userMessage);
+
+    private async Task AddUserMessageCoreAsync(
+        ChatMessage userMessage,
+        ChatMessage? aiUserMessage,
+        bool forceFreshContext,
+        bool suppressAssistantText,
+        string? inProgressLabel,
+        string? completionLabel)
     {
         CancelAnyCurrentResponse();
         messages.Add(userMessage);
@@ -524,17 +659,33 @@ else
             await chatInput.FocusAsync();
         }
 
-        var responseText = new TextContent("");
+        var responseText = new TextContent(inProgressLabel ?? "");
         currentResponseMessage = new ChatMessage(ChatRole.Assistant, [responseText]);
         currentResponseCancellation = new();
+        var hadError = false;
 
         try
         {
-            await foreach (var update in ChatClient.GetStreamingResponseAsync(messages.Skip(statefulMessageCount), chatOptions, currentResponseCancellation.Token))
+            var requestUserMessage = aiUserMessage ?? userMessage;
+            var requestMessages = forceFreshContext
+                ? new List<ChatMessage> { messages.First(m => m.Role == ChatRole.System), requestUserMessage }
+                : messages.Skip(statefulMessageCount).ToList();
+
+            var requestOptions = forceFreshContext
+                ? new ChatOptions { Tools = chatOptions.Tools }
+                : chatOptions;
+
+            await foreach (var update in ChatClient.GetStreamingResponseAsync(requestMessages, requestOptions, currentResponseCancellation.Token))
             {
                 messages.AddMessages(update, filter: c => c is not TextContent);
-                responseText.Text += update.Text;
-                chatOptions.ConversationId = update.ConversationId;
+                if (!suppressAssistantText)
+                {
+                    responseText.Text += update.Text;
+                }
+                if (!forceFreshContext)
+                {
+                    chatOptions.ConversationId = update.ConversationId;
+                }
                 if (currentResponseMessage is not null)
                 {
                     ChatMessageItem.NotifyChanged(currentResponseMessage);
@@ -543,15 +694,44 @@ else
         }
         catch (OperationCanceledException)
         {
+            hadError = true;
             responseText.Text += "\n\n[The response stream was canceled. Please try again.]";
         }
         catch (IOException)
         {
+            hadError = true;
             responseText.Text += "\n\n[Network interruption while streaming. Please retry.]";
         }
+        catch (Exception ex)
+        {
+            hadError = true;
+            var message = ex.Message;
+            if (message.Contains("No such host", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("NameResolution", StringComparison.OrdinalIgnoreCase))
+            {
+                message = "AI endpoint could not be reached. Check your endpoint DNS or network connection.";
+            }
+            if (message.Contains("tokens_limit_reached", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("Request body too large", StringComparison.OrdinalIgnoreCase))
+            {
+                message = "The request was too large for the model. I trimmed the context; please retry the action.";
+            }
+            responseText.Text += $"\n\n[Unexpected error: {message}]";
+        }
 
-        messages.Add(currentResponseMessage!);
-        statefulMessageCount = chatOptions.ConversationId is not null ? messages.Count : 0;
+        if (suppressAssistantText && !hadError)
+        {
+            responseText.Text = completionLabel ?? inProgressLabel ?? "Resume/CV generated.";
+        }
+
+        if (currentResponseMessage is not null)
+        {
+            messages.Add(currentResponseMessage);
+        }
+        if (!forceFreshContext)
+        {
+            statefulMessageCount = chatOptions.ConversationId is not null ? messages.Count : 0;
+        }
         currentResponseMessage = null;
         chatSuggestions?.Update(messages);
     }
@@ -596,13 +776,9 @@ else
     private List<string> BuildPromptWarnings()
     {
         var warnings = new List<string>();
-        if (string.IsNullOrWhiteSpace(hrPrompt))
-        {
-            warnings.Add("Prompt is required.");
-        }
         if (string.IsNullOrWhiteSpace(hrJobDescription))
         {
-            warnings.Add("Job description and requirements are required.");
+            warnings.Add("Prompt is required.");
         }
         if (!templateSelectionTouched)
         {
@@ -618,19 +794,57 @@ else
         {
             warnings.Add("Upload a PDF resume so I can extract the content.");
         }
-        if (string.IsNullOrWhiteSpace(uploadPrompt))
-        {
-            warnings.Add("Prompt is required.");
-        }
         if (string.IsNullOrWhiteSpace(uploadJobDescription))
         {
-            warnings.Add("Job description and requirements are required.");
+            warnings.Add("Prompt is required.");
         }
         if (!templateSelectionTouched)
         {
             warnings.Add("Choose a template to continue.");
         }
         return warnings;
+    }
+
+    private async Task ShowValidationAlertAsync(IReadOnlyList<string> warnings)
+    {
+        if (warnings.Count == 0)
+        {
+            return;
+        }
+
+        var message = "Please complete the following before submitting:\n- " + string.Join("\n- ", warnings);
+        await JS.InvokeVoidAsync("alert", message);
+    }
+
+    private void AddLocalErrorMessage(Exception ex)
+    {
+        messages.Add(new(ChatRole.Assistant, $"[Error] {ex.Message}"));
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    private bool HasExistingDraftData()
+        => !string.IsNullOrWhiteSpace(CvDraftState.Draft.FullName)
+           || !string.IsNullOrWhiteSpace(CvDraftState.Draft.Summary)
+           || CvDraftState.Draft.Experiences.Count > 0
+           || CvDraftState.Draft.Education.Count > 0
+           || CvDraftState.Draft.Skills.Count > 0
+           || CvDraftState.Draft.SkillGroups.Count > 0
+           || CvDraftState.Draft.Projects.Count > 0
+           || CvDraftState.Draft.Certifications.Count > 0;
+
+    private static bool IndicatesNoExperience(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        var normalized = text.ToLowerInvariant();
+        return normalized.Contains("no experience")
+            || normalized.Contains("no prior experience")
+            || normalized.Contains("fresher")
+            || normalized.Contains("0 years")
+            || normalized.Contains("0 year");
     }
 
     public void Dispose()

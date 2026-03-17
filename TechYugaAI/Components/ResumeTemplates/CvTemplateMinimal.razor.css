@@ -34,8 +34,8 @@
 }
 
 .cv-template-minimal .cv-block-title {
-    font-size: 0.8rem;
-    font-weight: 600;
+    font-size: 1.15rem;
+    font-weight: 700;
     color: var(--cv-accent);
     border-bottom: 1px solid var(--cv-accent);
     padding-bottom: 0.35rem;
@@ -52,7 +52,7 @@
 }
 
 .cv-template-minimal .cv-item-meta {
-    font-size: 0.8rem;
+    font-size: 0.85rem;
     color: #6b7280;
 }
 

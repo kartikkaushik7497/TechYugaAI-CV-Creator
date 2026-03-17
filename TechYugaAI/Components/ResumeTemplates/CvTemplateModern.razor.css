@@ -41,8 +41,8 @@
 }
 
 .cv-section-title {
-    font-size: 0.8rem;
-    font-weight: 600;
+    font-size: 1.15rem;
+    font-weight: 700;
     color: #c7d2fe;
     margin-bottom: 0.5rem;
 }
@@ -67,8 +67,8 @@
 }
 
 .cv-block-title {
-    font-size: 0.85rem;
-    font-weight: 600;
+    font-size: 1.2rem;
+    font-weight: 700;
     color: var(--cv-accent);
     border-bottom: 1px solid var(--cv-accent);
     padding-bottom: 0.35rem;
@@ -111,4 +111,14 @@
     color: inherit;
     text-decoration: underline;
     text-decoration-color: rgba(148, 163, 184, 0.8);
+}
+
+@media (max-width: 720px) {
+    .cv-template-modern {
+        grid-template-columns: 1fr;
+    }
+
+    .cv-modern-sidebar {
+        border-bottom: 1px solid rgba(148, 163, 184, 0.4);
+    }
 }
