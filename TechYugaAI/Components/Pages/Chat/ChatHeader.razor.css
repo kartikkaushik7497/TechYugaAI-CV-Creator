@@ -1,6 +1,10 @@
 .chat-header-container {
-    top: 0; 
-    padding: 1.5rem; 
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    padding: 1.5rem;
+    background: #eef0f4;
+    border-bottom: 1px solid #e5e7eb;
 }
 
 .chat-header-controls {
@@ -20,6 +24,6 @@ h1 {
 
 @media (min-width: 768px) {
     .chat-header-container {
-        position: sticky;
+        padding-top: 1.75rem;
     }
 }

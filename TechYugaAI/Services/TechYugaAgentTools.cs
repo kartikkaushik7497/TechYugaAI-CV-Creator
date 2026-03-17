@@ -1,15 +1,58 @@
-﻿using System.ComponentModel;
-using Microsoft.Extensions.AI;
+using System.ComponentModel;
 
 namespace TechYugaAI.Services;
 
 public class TechYugaAgentTools
 {
-    [Description("Generates a professional CV. Call this when the user has provided their details and wants a final document.")]
-    public string GenerateCVDoc(string fullName, string experienceSummary, string skills)
+    private readonly CvDraftState cvState;
+    private readonly CvPdfGenerator pdfGenerator;
+    private readonly CvTemplateRegistry templateRegistry;
+
+    public TechYugaAgentTools(CvDraftState cvState, CvPdfGenerator pdfGenerator, CvTemplateRegistry templateRegistry)
+    {
+        this.cvState = cvState;
+        this.pdfGenerator = pdfGenerator;
+        this.templateRegistry = templateRegistry;
+    }
+
+    [Description("Updates the CV draft using JSON. Provide structured data for name, summary, skills, experience, education, projects, certifications, and contact.")]
+    public string UpdateCvDraft(string cvJson)
+    {
+        if (!CvDraftJson.TryDeserialize(cvJson, out var draft, out var error) || draft is null)
+        {
+            return $"[ERROR] CV draft update failed. {error}";
+        }
+
+        cvState.ApplyUpdate(draft);
+        return "[SUCCESS] CV draft updated.";
+    }
+
+    [Description("Generates a professional CV PDF using the selected template. Provide templateId and the full cvJson draft when possible.")]
+    public string GenerateCVDoc(string templateId, string? cvJson = null)
     {
         // Integration point for QuestPDF or specialized ML.NET logic
-        return $"[SUCCESS] TechYuga CV generated for {fullName}. Ready for download.";
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(cvJson))
+            {
+                if (!CvDraftJson.TryDeserialize(cvJson, out var draft, out var error) || draft is null)
+                {
+                    return $"[ERROR] CV draft could not be parsed. {error}";
+                }
+
+                cvState.ApplyUpdate(draft);
+            }
+
+            var template = templateRegistry.Get(templateId);
+            var pdfUrl = pdfGenerator.GeneratePdf(cvState.Draft, template.Id);
+            cvState.SetGeneratedPdf(pdfUrl, Path.GetFileName(pdfUrl));
+
+            return $"[SUCCESS] TechYuga CV generated. Download: {pdfUrl}";
+        }
+        catch (Exception ex)
+        {
+            return $"[ERROR] PDF generation failed. {ex.Message}";
+        }
     }
 
     [Description("Calculates a project bid total based on labor, materials, and profit margin.")]

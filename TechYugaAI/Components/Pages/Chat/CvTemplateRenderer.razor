@@ -1,0 +1,61 @@
+@using TechYugaAI.Models.Cv
+@using TechYugaAI.Services
+@using TechYugaAI.Components.ResumeTemplates
+@inject CvTemplateRegistry TemplateRegistry
+
+@if (IsEmptyDraft)
+{
+    <div class="cv-preview-empty">
+        <h4>Your resume preview will appear here</h4>
+        <p>Start chatting with the assistant or use the prompt builder to generate a draft.</p>
+    </div>
+}
+else
+{
+    var template = TemplateRegistry.Get(TemplateId);
+    @switch (TemplateId)
+    {
+        case CvTemplateRegistry.MinimalId:
+        case CvTemplateRegistry.ZenId:
+            <CvTemplateMinimal Draft="@Draft" AccentHex="@template.AccentHex" />
+            break;
+        case CvTemplateRegistry.ExecutiveId:
+        case CvTemplateRegistry.AtlasId:
+            <CvTemplateExecutive Draft="@Draft" AccentHex="@template.AccentHex" />
+            break;
+        case CvTemplateRegistry.SlateId:
+        default:
+            <CvTemplateModern Draft="@Draft" AccentHex="@template.AccentHex" />
+            break;
+    }
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public required CvDraft Draft { get; set; }
+
+    [Parameter, EditorRequired]
+    public required string TemplateId { get; set; }
+
+    private bool IsEmptyDraft =>
+        string.IsNullOrWhiteSpace(Draft.FullName)
+        && string.IsNullOrWhiteSpace(Draft.Summary)
+        && string.IsNullOrWhiteSpace(Draft.Headline)
+        && !HasContactInfo
+        && Draft.Experiences.Count == 0
+        && Draft.Education.Count == 0
+        && Draft.Skills.Count == 0
+        && Draft.SkillGroups.Count == 0
+        && Draft.Projects.Count == 0
+        && Draft.Certifications.Count == 0
+        && Draft.AdditionalNotes.Count == 0;
+
+    private bool HasContactInfo =>
+        Draft.Contact is not null
+        && (!string.IsNullOrWhiteSpace(Draft.Contact.Email)
+            || !string.IsNullOrWhiteSpace(Draft.Contact.Phone)
+            || !string.IsNullOrWhiteSpace(Draft.Contact.Location)
+            || !string.IsNullOrWhiteSpace(Draft.Contact.LinkedIn)
+            || !string.IsNullOrWhiteSpace(Draft.Contact.Portfolio)
+            || !string.IsNullOrWhiteSpace(Draft.Contact.Website));
+}

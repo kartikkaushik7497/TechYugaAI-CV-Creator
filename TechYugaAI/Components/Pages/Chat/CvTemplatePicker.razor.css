@@ -1,0 +1,81 @@
+.cv-template-picker {
+    display: grid;
+    gap: 0.6rem;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+}
+
+.cv-template-option {
+    display: block;
+    cursor: pointer;
+}
+
+.cv-template-option input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.cv-template-card {
+    display: grid;
+    grid-template-columns: 0.5rem 1fr;
+    gap: 0.6rem;
+    align-items: center;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.75rem;
+    padding: 0.6rem 0.7rem;
+    background: #ffffff;
+    box-shadow: 0 10px 25px rgba(15, 23, 42, 0.06);
+    transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.cv-template-option.selected .cv-template-card {
+    border-color: #2563eb;
+    box-shadow: 0 12px 28px rgba(37, 99, 235, 0.18);
+    transform: translateY(-1px);
+}
+
+.cv-template-swatch {
+    width: 0.5rem;
+    height: 100%;
+    border-radius: 9999px;
+}
+
+.cv-template-meta {
+    display: grid;
+    gap: 0.25rem;
+}
+
+.cv-template-name {
+    font-weight: 600;
+    color: #111827;
+    font-size: 0.9rem;
+}
+
+.cv-template-desc {
+    font-size: 0.8rem;
+    color: #6b7280;
+}
+
+.template-preview-modern {
+    background: linear-gradient(120deg, #f8fafc 0%, #eef2ff 100%);
+}
+
+.template-preview-minimal {
+    background: linear-gradient(120deg, #ffffff 0%, #ecfeff 100%);
+}
+
+.template-preview-executive {
+    background: linear-gradient(120deg, #f5f3ff 0%, #ffffff 100%);
+}
+
+.template-preview-slate {
+    background: linear-gradient(120deg, #eef2ff 0%, #ffffff 100%);
+}
+
+.template-preview-zen {
+    background: linear-gradient(120deg, #ecfdf5 0%, #ffffff 100%);
+}
+
+.template-preview-atlas {
+    background: linear-gradient(120deg, #fff7ed 0%, #ffffff 100%);
+}

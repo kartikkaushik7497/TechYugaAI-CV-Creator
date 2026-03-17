@@ -1,10 +1,15 @@
-﻿@page "/"
+@page "/"
 @using System.ComponentModel
+@using System.Text
+@using Microsoft.AspNetCore.Components.Forms
+@using UglyToad.PdfPig
 @using TechYugaAI.Models
 @using TechYugaAI.Services
 @inject IChatClient ChatClient
-@inject NavigationManager Nav
 @inject SemanticSearch Search
+@inject CvDraftState CvDraftState
+@inject CvTemplateRegistry TemplateRegistry
+@inject TechYugaAgentTools AgentTools
 @implements IDisposable
 
 <PageTitle>TechYugaAI - @currentMode.ToString()</PageTitle>
@@ -17,33 +22,221 @@
     <button class="btn @(currentMode == TechYugaMode.ProjectProposal ? "btn-primary" : "btn-outline-primary")" @onclick="() => SwitchMode(TechYugaMode.ProjectProposal)">Proposals</button>
 </div>
 
-<ChatHeader OnNewChat="@ResetConversationAsync" />
+<ChatHeader OnNewChat="@NewChatAsync" />
 
-<ChatMessageList Messages="@messages" InProgressMessage="@currentResponseMessage">
-    <NoMessagesContent>
-        <div class="p-4 text-center">
-            <h3>Welcome to TechYugaAI</h3>
-            <p>Current Mode: <strong>@currentMode</strong></p>
-            <p>Select a tool above to start a specialized session.</p>
+@if (currentMode == TechYugaMode.CVCreator)
+{
+    <div class="cv-toolbar page-width">
+        <div class="cv-tab-group">
+            <button class="cv-tab @(currentCvTab == CvWorkflowTab.Guided ? "active" : "")" @onclick="() => SwitchCvTab(CvWorkflowTab.Guided)">Guided CV</button>
+            <button class="cv-tab @(currentCvTab == CvWorkflowTab.Prompt ? "active" : "")" @onclick="() => SwitchCvTab(CvWorkflowTab.Prompt)">Prompt + Job Description</button>
+            <button class="cv-tab @(currentCvTab == CvWorkflowTab.Upload ? "active" : "")" @onclick="() => SwitchCvTab(CvWorkflowTab.Upload)">Resume Upload</button>
         </div>
-    </NoMessagesContent>
-</ChatMessageList>
+        <div class="cv-template-badge">
+            Template: <strong>@TemplateRegistry.Get(CvDraftState.SelectedTemplateId).Name</strong>
+        </div>
+    </div>
 
-<div class="chat-container">
-    <ChatSuggestions OnSelected="@AddUserMessageAsync" @ref="@chatSuggestions" />
-    <ChatInput OnSend="@AddUserMessageAsync" @ref="@chatInput" />
-</div>
+    <div class="cv-shell">
+        <div class="cv-left">
+            @if (currentCvTab == CvWorkflowTab.Prompt)
+            {
+                <div class="cv-prompt-card">
+                    <div class="cv-steps">
+                        <div class="cv-step">1. Prompt</div>
+                        <div class="cv-step">2. Choose Template</div>
+                        <div class="cv-step">3. Generate CV</div>
+                    </div>
+                    <div class="cv-prompt-title">Prompt + Job Description</div>
+                    <p class="cv-hint">Provide a role prompt and full job description/requirements. The assistant will generate a complete, ATS-optimized resume.</p>
+
+                    @if (PromptWarnings.Count > 0)
+                    {
+                        <div class="cv-alert">
+                            <strong>Before generating:</strong>
+                            <ul>
+                                @foreach (var warning in PromptWarnings)
+                                {
+                                    <li>@warning</li>
+                                }
+                            </ul>
+                        </div>
+                    }
+
+                    <label class="cv-field-label">Prompt *</label>
+                    <textarea class="cv-textarea" @bind="hrPrompt" @bind:event="oninput" rows="3" placeholder="Please generate a professional, ATS-optimized, one-page resume for a React Developer with 4 years of experience."></textarea>
+                    <label class="cv-field-label">Job Description + Requirements *</label>
+                    <textarea class="cv-textarea" @bind="hrJobDescription" @bind:event="oninput" rows="4" placeholder="Paste the job description, required skills, and experience expectations here."></textarea>
+                    <div class="cv-prompt-actions">
+                        <button class="btn btn-primary" @onclick="GenerateFromPromptAsync">Generate CV</button>
+                    </div>
+                    <div class="cv-template-inline">
+                        <div class="cv-field-label">Choose a template *</div>
+                        <CvTemplatePicker Templates="@TemplateRegistry.Templates"
+                                          SelectedTemplateId="@CvDraftState.SelectedTemplateId"
+                                          SelectedTemplateIdChanged="@OnTemplateSelected" />
+                    </div>
+                </div>
+            }
+            else if (currentCvTab == CvWorkflowTab.Upload)
+            {
+                <div class="cv-prompt-card">
+                    <div class="cv-steps">
+                        <div class="cv-step">1. Upload Resume</div>
+                        <div class="cv-step">2. Prompt + JD</div>
+                        <div class="cv-step">3. Choose Template</div>
+                        <div class="cv-step">4. Generate CV</div>
+                    </div>
+                    <div class="cv-prompt-title">Resume Upgrade (PDF)</div>
+                    <p class="cv-hint">Upload an existing resume PDF and provide a target role prompt plus JD/requirements. The assistant will rewrite and optimize the CV.</p>
+
+                    @if (!string.IsNullOrWhiteSpace(uploadError))
+                    {
+                        <div class="cv-alert cv-alert-error">@uploadError</div>
+                    }
+
+                    @if (UploadWarnings.Count > 0)
+                    {
+                        <div class="cv-alert">
+                            <strong>Before generating:</strong>
+                            <ul>
+                                @foreach (var warning in UploadWarnings)
+                                {
+                                    <li>@warning</li>
+                                }
+                            </ul>
+                        </div>
+                    }
+
+                    <label class="cv-field-label">Upload Resume PDF *</label>
+                    <InputFile OnChange="HandleResumeUploadAsync" accept=".pdf" class="cv-file-input" />
+                    @if (uploadInProgress)
+                    {
+                        <div class="cv-upload-status">Extracting text from PDF...</div>
+                    }
+                    @if (!string.IsNullOrWhiteSpace(uploadedResumeFileName))
+                    {
+                        <div class="cv-upload-status">Uploaded: @uploadedResumeFileName (@(uploadedResumeText?.Length ?? 0) characters extracted)</div>
+                    }
+
+                    <label class="cv-field-label">Prompt *</label>
+                    <textarea class="cv-textarea" @bind="uploadPrompt" @bind:event="oninput" rows="3" placeholder="Improve this resume for a Senior React Developer role with 4 years of experience."></textarea>
+                    <label class="cv-field-label">Job Description + Requirements *</label>
+                    <textarea class="cv-textarea" @bind="uploadJobDescription" @bind:event="oninput" rows="4" placeholder="Paste the job description, required skills, and experience expectations here."></textarea>
+                    <div class="cv-prompt-actions">
+                        <button class="btn btn-primary" @onclick="GenerateFromUploadAsync">Improve Resume</button>
+                    </div>
+                    <div class="cv-template-inline">
+                        <div class="cv-field-label">Choose a template *</div>
+                        <CvTemplatePicker Templates="@TemplateRegistry.Templates"
+                                          SelectedTemplateId="@CvDraftState.SelectedTemplateId"
+                                          SelectedTemplateIdChanged="@OnTemplateSelected" />
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="cv-guide-card">
+                    <div class="cv-guide-title">Guided CV Builder</div>
+                    <p>Share your details in chat. The assistant will collect and structure your resume using AI only.</p>
+                    <CvTemplatePicker Templates="@TemplateRegistry.Templates"
+                                      SelectedTemplateId="@CvDraftState.SelectedTemplateId"
+                                      SelectedTemplateIdChanged="@OnTemplateSelected" />
+                </div>
+            }
+
+            <ChatMessageList Messages="@messages" InProgressMessage="@currentResponseMessage">
+                <NoMessagesContent>
+                    <div class="cv-empty-chat">
+                        <h3>Start building your CV</h3>
+                        <p>Tell the assistant about your experience, skills, projects, or education.</p>
+                    </div>
+                </NoMessagesContent>
+            </ChatMessageList>
+
+            <div class="chat-container">
+                <ChatSuggestions OnSelected="@AddUserMessageAsync" @ref="@chatSuggestions" />
+                <ChatInput OnSend="@AddUserMessageAsync" @ref="@chatInput" />
+            </div>
+        </div>
+
+        <div class="cv-right">
+            <div class="cv-preview-header">
+                <div>
+                    <h3>Live Preview</h3>
+                    <div class="cv-preview-sub">Template: @TemplateRegistry.Get(CvDraftState.SelectedTemplateId).Name</div>
+                </div>
+                @if (CvDraftState.LastGeneratedPdfUrl is not null)
+                {
+                    <span class="cv-preview-status">PDF Ready</span>
+                }
+            </div>
+
+            <div class="cv-preview-body">
+                <div class="cv-preview-canvas">
+                    <CvTemplateRenderer Draft="@CvDraftState.Draft" TemplateId="@CvDraftState.SelectedTemplateId" />
+                </div>
+            </div>
+
+            <div class="cv-preview-actions">
+                @if (CvDraftState.LastGeneratedPdfUrl is not null)
+                {
+                    <a class="btn btn-outline-primary" href="@CvDraftState.LastGeneratedPdfUrl" target="_blank">View PDF</a>
+                    <a class="btn btn-primary" href="@CvDraftState.LastGeneratedPdfUrl" download="@CvDraftState.LastGeneratedPdfFileName">Download PDF</a>
+                    @if (currentCvTab != CvWorkflowTab.Guided)
+                    {
+                        <button class="btn btn-outline-secondary" @onclick="() => SwitchCvTab(CvWorkflowTab.Guided)">Update CV (Guided)</button>
+                    }
+                }
+                else
+                {
+                    <button class="btn btn-primary" @onclick="RequestPdfGenerationAsync">Generate PDF with Assistant</button>
+                }
+            </div>
+        </div>
+    </div>
+}
+else
+{
+    <ChatMessageList Messages="@messages" InProgressMessage="@currentResponseMessage">
+        <NoMessagesContent>
+            <div class="p-4 text-center">
+                <h3>Welcome to TechYugaAI</h3>
+                <p>Current Mode: <strong>@currentMode</strong></p>
+                <p>Select a tool above to start a specialized session.</p>
+            </div>
+        </NoMessagesContent>
+    </ChatMessageList>
+
+    <div class="chat-container">
+        <ChatSuggestions OnSelected="@AddUserMessageAsync" @ref="@chatSuggestions" />
+        <ChatInput OnSend="@AddUserMessageAsync" @ref="@chatInput" />
+    </div>
+}
 
 @code {
-    private TechYugaMode currentMode = TechYugaMode.General;
-
-    private string GetSystemPrompt() => currentMode switch
+    private enum CvWorkflowTab
     {
-        TechYugaMode.CVCreator => "You are the TechYuga CV Agent. Guide the user to provide work history, education, and skills. Use GenerateCVDoc when they are finished.",
-        TechYugaMode.BidMaker => "You are the TechYuga Bid Specialist. Help users estimate costs. Use CalculateBid for any pricing logic.",
-        TechYugaMode.ProjectProposal => "You are the TechYuga Proposal Architect. Draft formal project scopes and timelines.",
-        _ => "You are TechYugaAI, a professional assistant using RAG to answer questions."
-    };
+        Guided,
+        Prompt,
+        Upload
+    }
+
+    private const long MaxUploadBytes = 10 * 1024 * 1024;
+
+    private TechYugaMode currentMode = TechYugaMode.General;
+    private CvWorkflowTab currentCvTab = CvWorkflowTab.Guided;
+    private string? hrPrompt;
+    private string? hrJobDescription;
+    private string? uploadPrompt;
+    private string? uploadJobDescription;
+    private string? uploadedResumeText;
+    private string? uploadedResumeFileName;
+    private string? uploadError;
+    private bool uploadInProgress;
+    private bool promptAttempted;
+    private bool uploadAttempted;
+    private bool templateSelectionTouched;
 
     private int statefulMessageCount;
     private readonly ChatOptions chatOptions = new();
@@ -52,21 +245,95 @@
     private ChatMessage? currentResponseMessage;
     private ChatInput? chatInput;
     private ChatSuggestions? chatSuggestions;
-    private TechYugaAgentTools agentTools = new();
 
     protected override void OnInitialized()
     {
         InitializeTools();
+        CvDraftState.OnChange += HandleDraftChange;
         messages.Add(new(ChatRole.System, GetSystemPrompt()));
+    }
+
+    private void HandleDraftChange() => InvokeAsync(StateHasChanged);
+
+    private string GetSystemPrompt()
+    {
+        if (currentMode == TechYugaMode.CVCreator)
+        {
+            var templateList = string.Join(", ", TemplateRegistry.Templates.Select(t => $"{t.Id} ({t.Name})"));
+            var jsonSchema = """
+                Use UpdateCvDraft with JSON:
+                - Use strings for all scalar values (including dates and years of experience).
+                {
+                  "fullName": "",
+                  "headline": "",
+                  "summary": "",
+                  "roleTarget": "",
+                  "yearsOfExperience": "",
+                  "contact": { "email": "", "phone": "", "location": "", "linkedin": "", "portfolio": "", "website": "" },
+                  "skills": [],
+                  "skillGroups": [ { "name": "", "items": [] } ],
+                  "experiences": [ { "title": "", "company": "", "location": "", "employmentType": "", "startDate": "", "endDate": "", "highlights": [], "technologies": [] } ],
+                  "education": [ { "degree": "", "institution": "", "location": "", "startDate": "", "endDate": "", "details": [] } ],
+                  "projects": [ { "name": "", "role": "", "description": "", "link": "", "highlights": [], "technologies": [] } ],
+                  "certifications": [ { "name": "", "issuer": "", "date": "" } ],
+                  "additionalNotes": []
+                }
+                """;
+
+            if (currentCvTab == CvWorkflowTab.Guided)
+            {
+                return $"""
+                    You are the TechYuga CV Agent (Guided Mode). Collect CV details using AI-only chat prompts.
+                    Ask concise follow-up questions when information is missing. Support freshers (focus on projects/skills)
+                    and experienced professionals (focus on impact and work history). Keep the resume ATS-optimized.
+                    Available templates: {templateList}. Use the selected template ID when generating PDFs.
+                    {jsonSchema}
+                    Always call UpdateCvDraft after every user response that provides new information.
+                    Provide a complete JSON draft that retains any previously known data. Do not clear fields unless instructed.
+                    When the user asks to generate a PDF, call GenerateCVDoc with templateId and the full cvJson draft.
+                    """;
+            }
+
+            if (currentCvTab == CvWorkflowTab.Upload)
+            {
+                return $"""
+                    You are the TechYuga CV Enhancer (Resume Upload Mode). You will receive resume text extracted from a PDF,
+                    plus a target role prompt and full job description/requirements. Rewrite and optimize the resume for ATS,
+                    ensure strong impact statements, and fill missing sections if possible without inventing facts.
+                    Available templates: {templateList}. Use the selected template ID when generating PDFs.
+                    {jsonSchema}
+                    First call UpdateCvDraft with the full JSON draft. Then respond with a short summary and ask for edits.
+                    When the user requests the final PDF, call GenerateCVDoc with templateId and the full cvJson draft.
+                    """;
+            }
+
+            return $"""
+                You are the TechYuga CV Generator (Prompt + Job Description Mode). Use the provided prompt and
+                job description/requirements to generate a complete, ATS-optimized, one-page resume. Populate all relevant sections.
+                Available templates: {templateList}. Use the selected template ID when generating PDFs.
+                {jsonSchema}
+                First call UpdateCvDraft with the full JSON draft. Then respond with a short summary and ask if edits are needed.
+                When the user requests the final PDF, call GenerateCVDoc with templateId and the full cvJson draft.
+                """;
+        }
+
+        return currentMode switch
+        {
+            TechYugaMode.BidMaker => "You are the TechYuga Bid Specialist. Help users estimate costs. Use CalculateBid for any pricing logic.",
+            TechYugaMode.ProjectProposal => "You are the TechYuga Proposal Architect. Draft formal project scopes and timelines.",
+            _ => "You are TechYugaAI, a professional assistant using RAG to answer questions."
+        };
     }
 
     private void InitializeTools()
     {
-        chatOptions.Tools = [
+        chatOptions.Tools =
+        [
             AIFunctionFactory.Create(LoadDocumentsAsync),
             AIFunctionFactory.Create(SearchAsync),
-            AIFunctionFactory.Create(agentTools.GenerateCVDoc),
-            AIFunctionFactory.Create(agentTools.CalculateBid)
+            AIFunctionFactory.Create(AgentTools.UpdateCvDraft),
+            AIFunctionFactory.Create(AgentTools.GenerateCVDoc),
+            AIFunctionFactory.Create(AgentTools.CalculateBid)
         ];
     }
 
@@ -76,23 +343,211 @@
         await ResetConversationAsync();
     }
 
+    private async Task SwitchCvTab(CvWorkflowTab tab)
+    {
+        currentCvTab = tab;
+        promptAttempted = false;
+        uploadAttempted = false;
+        uploadError = null;
+        await ResetConversationAsync();
+    }
+
+    private void OnTemplateSelected(string templateId)
+    {
+        templateSelectionTouched = true;
+        CvDraftState.SetTemplate(templateId);
+    }
+
+    private async Task GenerateFromPromptAsync()
+    {
+        promptAttempted = true;
+        if (!IsPromptReady)
+        {
+            return;
+        }
+
+        var template = TemplateRegistry.Get(CvDraftState.SelectedTemplateId);
+        var builder = new StringBuilder();
+        builder.AppendLine("Generate a professional, ATS-optimized resume using the following prompt:");
+        builder.AppendLine(hrPrompt!.Trim());
+        builder.AppendLine();
+        builder.AppendLine("Job Description and Requirements:");
+        builder.AppendLine(hrJobDescription!.Trim());
+        builder.AppendLine();
+        builder.AppendLine($"Template preference: {template.Name} ({template.Id}).");
+        builder.AppendLine("Return structured data via UpdateCvDraft.");
+
+        await AddUserMessageAsync(new(ChatRole.User, builder.ToString()));
+    }
+
+    private async Task GenerateFromUploadAsync()
+    {
+        uploadAttempted = true;
+        if (!IsUploadReady)
+        {
+            return;
+        }
+
+        var template = TemplateRegistry.Get(CvDraftState.SelectedTemplateId);
+        var builder = new StringBuilder();
+        builder.AppendLine("Improve and rewrite this resume based on the target role and job description.");
+        builder.AppendLine();
+        builder.AppendLine("Target Role Prompt:");
+        builder.AppendLine(uploadPrompt!.Trim());
+        builder.AppendLine();
+        builder.AppendLine("Job Description and Requirements:");
+        builder.AppendLine(uploadJobDescription!.Trim());
+        builder.AppendLine();
+        builder.AppendLine("Resume Text (from PDF):");
+        builder.AppendLine(uploadedResumeText!.Trim());
+        builder.AppendLine();
+        builder.AppendLine($"Template preference: {template.Name} ({template.Id}).");
+        builder.AppendLine("Return structured data via UpdateCvDraft.");
+
+        await AddUserMessageAsync(new(ChatRole.User, builder.ToString()));
+    }
+
+    private async Task RequestPdfGenerationAsync()
+    {
+        var template = TemplateRegistry.Get(CvDraftState.SelectedTemplateId);
+        var message = $"Please generate the final CV PDF using template {template.Name} ({template.Id}). Use GenerateCVDoc with the full cvJson draft.";
+        await AddUserMessageAsync(new(ChatRole.User, message));
+    }
+
+    private async Task HandleResumeUploadAsync(InputFileChangeEventArgs args)
+    {
+        uploadError = null;
+        uploadedResumeText = null;
+        uploadedResumeFileName = null;
+        uploadInProgress = false;
+
+        var file = args.File;
+        if (file is null)
+        {
+            uploadError = "Please choose a PDF file.";
+            return;
+        }
+
+        if (!file.Name.EndsWith(".pdf", StringComparison.OrdinalIgnoreCase))
+        {
+            uploadError = "Only PDF files are supported.";
+            return;
+        }
+
+        if (file.Size > MaxUploadBytes)
+        {
+            uploadError = $"Please upload a PDF smaller than {MaxUploadBytes / (1024 * 1024)} MB.";
+            return;
+        }
+
+        uploadedResumeFileName = file.Name;
+
+        try
+        {
+            uploadInProgress = true;
+            await InvokeAsync(StateHasChanged);
+
+            await using var stream = file.OpenReadStream(MaxUploadBytes);
+            using var buffer = new MemoryStream();
+            await stream.CopyToAsync(buffer);
+            buffer.Position = 0;
+
+            var extracted = await Task.Run(() => ExtractTextFromPdf(buffer));
+            if (string.IsNullOrWhiteSpace(extracted))
+            {
+                uploadError = "We could not extract readable text from that PDF. Try a different file.";
+                return;
+            }
+
+            uploadedResumeText = extracted;
+        }
+        catch (Exception ex)
+        {
+            uploadError = $"Failed to read the PDF: {ex.Message}";
+        }
+        finally
+        {
+            uploadInProgress = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private static string ExtractTextFromPdf(Stream pdfStream)
+    {
+        if (pdfStream.CanSeek)
+        {
+            pdfStream.Position = 0;
+        }
+
+        using var document = PdfDocument.Open(pdfStream);
+        var builder = new StringBuilder();
+        foreach (var page in document.GetPages())
+        {
+            var text = page.Text;
+            if (!string.IsNullOrWhiteSpace(text))
+            {
+                builder.AppendLine(text.Trim());
+                builder.AppendLine();
+            }
+        }
+
+        return builder.ToString().Trim();
+    }
+
+    private async Task NewChatAsync()
+    {
+        if (currentMode == TechYugaMode.CVCreator)
+        {
+            CvDraftState.Reset();
+            hrPrompt = null;
+            hrJobDescription = null;
+            uploadPrompt = null;
+            uploadJobDescription = null;
+            uploadedResumeText = null;
+            uploadedResumeFileName = null;
+            uploadError = null;
+            promptAttempted = false;
+            uploadAttempted = false;
+            templateSelectionTouched = false;
+        }
+
+        await ResetConversationAsync();
+    }
+
     private async Task AddUserMessageAsync(ChatMessage userMessage)
     {
         CancelAnyCurrentResponse();
         messages.Add(userMessage);
         chatSuggestions?.Clear();
-        await chatInput!.FocusAsync();
+        if (chatInput is not null)
+        {
+            await chatInput.FocusAsync();
+        }
 
         var responseText = new TextContent("");
         currentResponseMessage = new ChatMessage(ChatRole.Assistant, [responseText]);
         currentResponseCancellation = new();
 
-        await foreach (var update in ChatClient.GetStreamingResponseAsync(messages.Skip(statefulMessageCount), chatOptions, currentResponseCancellation.Token))
+        try
         {
-            messages.AddMessages(update, filter: c => c is not TextContent);
-            responseText.Text += update.Text;
-            chatOptions.ConversationId = update.ConversationId;
-            ChatMessageItem.NotifyChanged(currentResponseMessage);
+            await foreach (var update in ChatClient.GetStreamingResponseAsync(messages.Skip(statefulMessageCount), chatOptions, currentResponseCancellation.Token))
+            {
+                messages.AddMessages(update, filter: c => c is not TextContent);
+                responseText.Text += update.Text;
+                chatOptions.ConversationId = update.ConversationId;
+                if (currentResponseMessage is not null)
+                {
+                    ChatMessageItem.NotifyChanged(currentResponseMessage);
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            responseText.Text += "\n\n[The response stream was canceled. Please try again.]";
+        }
+        catch (IOException)
+        {
+            responseText.Text += "\n\n[Network interruption while streaming. Please retry.]";
         }
 
         messages.Add(currentResponseMessage!);
@@ -109,7 +564,10 @@
         chatOptions.ConversationId = null;
         statefulMessageCount = 0;
         chatSuggestions?.Clear();
-        await chatInput!.FocusAsync();
+        if (chatInput is not null)
+        {
+            await chatInput.FocusAsync();
+        }
     }
 
     private void CancelAnyCurrentResponse()
@@ -129,5 +587,55 @@
         return results.Select(result => $"<result filename=\"{result.DocumentId}\">{result.Text}</result>");
     }
 
-    public void Dispose() => currentResponseCancellation?.Cancel();
+    private bool IsPromptReady => BuildPromptWarnings().Count == 0;
+    private bool IsUploadReady => BuildUploadWarnings().Count == 0;
+
+    private IReadOnlyList<string> PromptWarnings => promptAttempted ? BuildPromptWarnings() : Array.Empty<string>();
+    private IReadOnlyList<string> UploadWarnings => uploadAttempted ? BuildUploadWarnings() : Array.Empty<string>();
+
+    private List<string> BuildPromptWarnings()
+    {
+        var warnings = new List<string>();
+        if (string.IsNullOrWhiteSpace(hrPrompt))
+        {
+            warnings.Add("Prompt is required.");
+        }
+        if (string.IsNullOrWhiteSpace(hrJobDescription))
+        {
+            warnings.Add("Job description and requirements are required.");
+        }
+        if (!templateSelectionTouched)
+        {
+            warnings.Add("Choose a template to continue.");
+        }
+        return warnings;
+    }
+
+    private List<string> BuildUploadWarnings()
+    {
+        var warnings = new List<string>();
+        if (string.IsNullOrWhiteSpace(uploadedResumeText))
+        {
+            warnings.Add("Upload a PDF resume so I can extract the content.");
+        }
+        if (string.IsNullOrWhiteSpace(uploadPrompt))
+        {
+            warnings.Add("Prompt is required.");
+        }
+        if (string.IsNullOrWhiteSpace(uploadJobDescription))
+        {
+            warnings.Add("Job description and requirements are required.");
+        }
+        if (!templateSelectionTouched)
+        {
+            warnings.Add("Choose a template to continue.");
+        }
+        return warnings;
+    }
+
+    public void Dispose()
+    {
+        currentResponseCancellation?.Cancel();
+        CvDraftState.OnChange -= HandleDraftChange;
+    }
 }
