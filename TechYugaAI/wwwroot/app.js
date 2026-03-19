@@ -344,3 +344,20 @@ customElements.define('assistant-message', class extends HTMLElement {
 // SIG // yRcrsDcqVoN2+wrSYSfGZnKnt8uNTSfclyYyr20jrTD0
 // SIG // t6R2kJB36EA2o4qBT4gmcRK3uaOJo7GMRkDbIg==
 // SIG // End signature block
+
+window.techyugaTheme = {
+  init: () => {
+    const saved = localStorage.getItem('techyuga-theme');
+    const isDark = saved === 'dark';
+    document.documentElement.classList.toggle('theme-dark', isDark);
+    document.body.classList.toggle('theme-dark', isDark);
+    return isDark;
+  },
+  toggle: () => {
+    const isDark = !document.documentElement.classList.contains('theme-dark');
+    document.documentElement.classList.toggle('theme-dark', isDark);
+    document.body.classList.toggle('theme-dark', isDark);
+    localStorage.setItem('techyuga-theme', isDark ? 'dark' : 'light');
+    return isDark;
+  }
+};

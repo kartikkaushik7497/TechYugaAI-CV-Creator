@@ -1,15 +1,15 @@
 ﻿.input-box {
-    display: flex; 
-    flex-direction: column; 
-    background: white;
-    border: 1px solid rgb(229, 231, 235);
-    border-radius: 8px;
-    padding: 0.5rem 0.75rem;
-    margin-top: 0.75rem; 
+    display: flex;
+    flex-direction: column;
+    background: #ffffff;
+    border: 1px solid #cbd5f5;
+    border-radius: 0.75rem;
+    padding: 0.75rem;
+    margin-top: 0.75rem;
 }
 
     .input-box:focus-within {
-        outline: 2px solid #4152d5;
+        outline: 2px solid #2563eb;
     }
 
 textarea {
@@ -17,6 +17,9 @@ textarea {
     border: none;
     outline: none;
     flex-grow: 1;
+    font-size: 0.95rem;
+    background: transparent;
+    color: #0f172a;
 }
 
     textarea:placeholder-shown + .tools {
@@ -24,8 +27,8 @@ textarea {
     }
 
 .tools {
-    display: flex; 
-    margin-top: 1rem; 
+    display: flex;
+    margin-top: 0.75rem;
     align-items: center;
 }
 
@@ -40,7 +43,7 @@ textarea {
 }
 
     .send-button:hover {
-        color: black;
+        color: #0f172a;
     }
 
 .attach {
@@ -55,3 +58,26 @@ textarea {
         background-color: #f0f0f0;
         color: black;
     }
+
+:global(body.theme-dark) .input-box {
+    background: #0f151c;
+    border-color: #1f2a37;
+}
+
+:global(body.theme-dark) textarea {
+    color: #e5e7eb;
+    background: transparent;
+}
+
+:global(body.theme-dark) textarea::placeholder {
+    color: #64748b;
+}
+
+:global(body.theme-dark) .input-box:focus-within {
+    outline: 2px solid #34d399;
+}
+
+:global(body.theme-dark) .send-button:hover {
+    color: #e5e7eb;
+}
+

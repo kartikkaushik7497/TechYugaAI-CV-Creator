@@ -1,6 +1,8 @@
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
+using System.Text;
+using System.Text.RegularExpressions;
 using TechYugaAI.Models.Cv;
 
 namespace TechYugaAI.Services;
@@ -20,6 +22,19 @@ public sealed class CvPdfGenerator
     {
         QuestPDF.Settings.License = LicenseType.Community;
 
+        try
+        {
+            return GeneratePdfInternal(draft, templateId);
+        }
+        catch (Exception ex) when (IsRecoverablePdfException(ex))
+        {
+            var sanitized = SanitizeDraft(draft);
+            return GeneratePdfInternal(sanitized, templateId);
+        }
+    }
+
+    private string GeneratePdfInternal(CvDraft draft, string templateId)
+    {
         var template = templates.Get(templateId);
         var outputDirectory = Path.Combine(environment.WebRootPath, "generated");
         Directory.CreateDirectory(outputDirectory);
@@ -40,6 +55,124 @@ public sealed class CvPdfGenerator
 
         document.GeneratePdf(filePath);
         return $"/generated/{fileName}";
+    }
+
+    private static bool IsRecoverablePdfException(Exception ex)
+    {
+        var message = ex.Message ?? string.Empty;
+        return message.Contains("layout", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("overflow", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("font", StringComparison.OrdinalIgnoreCase)
+            || message.Contains("QuestPDF", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static CvDraft SanitizeDraft(CvDraft draft)
+    {
+        return new CvDraft
+        {
+            FullName = NormalizeText(draft.FullName, 120),
+            Headline = NormalizeText(draft.Headline, 180),
+            Summary = NormalizeText(draft.Summary, 1800),
+            RoleTarget = NormalizeText(draft.RoleTarget, 180),
+            YearsOfExperience = NormalizeText(draft.YearsOfExperience, 20),
+            Contact = new CvContact
+            {
+                Email = NormalizeText(draft.Contact?.Email, 120),
+                Phone = NormalizeText(draft.Contact?.Phone, 60),
+                Location = NormalizeText(draft.Contact?.Location, 120),
+                LinkedIn = NormalizeText(draft.Contact?.LinkedIn, 200),
+                Portfolio = NormalizeText(draft.Contact?.Portfolio, 200),
+                Website = NormalizeText(draft.Contact?.Website, 200)
+            },
+            Skills = draft.Skills.Select(s => NormalizeText(s, 120)).Where(s => !string.IsNullOrWhiteSpace(s)).ToList(),
+            SkillGroups = draft.SkillGroups.Select(g => new CvSkillGroup
+            {
+                Name = NormalizeText(g.Name, 120),
+                Items = g.Items.Select(i => NormalizeText(i, 120)).Where(i => !string.IsNullOrWhiteSpace(i)).ToList()
+            }).ToList(),
+            Experiences = draft.Experiences.Select(e => new CvExperience
+            {
+                Title = NormalizeText(e.Title, 160),
+                Company = NormalizeText(e.Company, 160),
+                Location = NormalizeText(e.Location, 160),
+                EmploymentType = NormalizeText(e.EmploymentType, 80),
+                StartDate = NormalizeText(e.StartDate, 40),
+                EndDate = NormalizeText(e.EndDate, 40),
+                Highlights = e.Highlights.Select(h => NormalizeText(h, 300)).Where(h => !string.IsNullOrWhiteSpace(h)).ToList(),
+                Technologies = e.Technologies.Select(t => NormalizeText(t, 120)).Where(t => !string.IsNullOrWhiteSpace(t)).ToList()
+            }).ToList(),
+            Education = draft.Education.Select(e => new CvEducation
+            {
+                Degree = NormalizeText(e.Degree, 200),
+                Institution = NormalizeText(e.Institution, 200),
+                Location = NormalizeText(e.Location, 120),
+                StartDate = NormalizeText(e.StartDate, 40),
+                EndDate = NormalizeText(e.EndDate, 40),
+                Details = e.Details.Select(d => NormalizeText(d, 240)).Where(d => !string.IsNullOrWhiteSpace(d)).ToList()
+            }).ToList(),
+            Projects = draft.Projects.Select(p => new CvProject
+            {
+                Name = NormalizeText(p.Name, 200),
+                Role = NormalizeText(p.Role, 160),
+                Description = NormalizeText(p.Description, 800),
+                Link = NormalizeText(p.Link, 240),
+                Highlights = p.Highlights.Select(h => NormalizeText(h, 300)).Where(h => !string.IsNullOrWhiteSpace(h)).ToList(),
+                Technologies = p.Technologies.Select(t => NormalizeText(t, 120)).Where(t => !string.IsNullOrWhiteSpace(t)).ToList()
+            }).ToList(),
+            Certifications = draft.Certifications.Select(c => new CvCertification
+            {
+                Name = NormalizeText(c.Name, 200),
+                Issuer = NormalizeText(c.Issuer, 200),
+                Date = NormalizeText(c.Date, 80)
+            }).ToList(),
+            AdditionalNotes = draft.AdditionalNotes.Select(n => NormalizeText(n, 240)).Where(n => !string.IsNullOrWhiteSpace(n)).ToList()
+        };
+    }
+
+    private static string NormalizeText(string? value, int maxLength)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var cleaned = value.Replace('\r', ' ').Replace('\n', ' ').Trim();
+        if (cleaned.Length > maxLength)
+        {
+            cleaned = cleaned[..maxLength];
+        }
+
+        cleaned = Regex.Replace(cleaned, "\\s{2,}", " ");
+        return BreakLongTokens(cleaned, 30);
+    }
+
+    private static string BreakLongTokens(string text, int chunkSize)
+    {
+        var parts = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        for (var i = 0; i < parts.Length; i++)
+        {
+            if (parts[i].Length <= chunkSize)
+            {
+                continue;
+            }
+
+            var token = parts[i];
+            var builder = new StringBuilder();
+            var index = 0;
+            while (index < token.Length)
+            {
+                var length = Math.Min(chunkSize, token.Length - index);
+                builder.Append(token.Substring(index, length));
+                if (index + length < token.Length)
+                {
+                    builder.Append('\u200b');
+                }
+                index += length;
+            }
+            parts[i] = builder.ToString();
+        }
+
+        return string.Join(' ', parts);
     }
 
     private static string? SanitizeFilePart(string? input)
@@ -116,7 +249,7 @@ public sealed class CvPdfGenerator
             }
             if (!string.IsNullOrWhiteSpace(contact.Phone))
             {
-                yield return (contact.Phone, $"tel:{NormalizePhone(contact.Phone)}");
+                yield return (contact.Phone, null);
             }
             if (!string.IsNullOrWhiteSpace(contact.Location))
             {
@@ -199,9 +332,10 @@ public sealed class CvPdfGenerator
                             {
                                 if (!string.IsNullOrWhiteSpace(entry.Url))
                                 {
-                                    var linkItem = left.Item();
-                                    linkItem.Hyperlink(entry.Url);
-                                    linkItem.Text(entry.Label).FontColor(Colors.White);
+                                    left.Item()
+                                        .Hyperlink(entry.Url)
+                                        .Text(entry.Label)
+                                        .FontColor(Colors.White);
                                 }
                                 else
                                 {
@@ -258,9 +392,11 @@ public sealed class CvPdfGenerator
                                 right.Item().Text(Safe(project.Name)).SemiBold();
                                 if (!string.IsNullOrWhiteSpace(project.Link))
                                 {
-                                    var linkItem = right.Item();
-                                    linkItem.Hyperlink(NormalizeUrl(project.Link));
-                                    linkItem.Text(project.Link).FontColor(Colors.Blue.Darken2).FontSize(9);
+                                    right.Item()
+                                        .Hyperlink(NormalizeUrl(project.Link))
+                                        .Text(project.Link)
+                                        .FontColor(Colors.Blue.Darken2)
+                                        .FontSize(9);
                                 }
                                 right.Item().Text(Safe(project.Description)).FontSize(9.5f);
                                 if (HasItems(project.Highlights))
@@ -323,9 +459,11 @@ public sealed class CvPdfGenerator
                                 {
                                     if (!string.IsNullOrWhiteSpace(entry.Url))
                                     {
-                                        var linkItem = contact.Item();
-                                        linkItem.Hyperlink(entry.Url);
-                                        linkItem.Text(entry.Label).FontSize(9).FontColor(Colors.Blue.Darken2);
+                                        contact.Item()
+                                            .Hyperlink(entry.Url)
+                                            .Text(entry.Label)
+                                            .FontSize(9)
+                                            .FontColor(Colors.Blue.Darken2);
                                     }
                                     else
                                     {
@@ -399,12 +537,14 @@ public sealed class CvPdfGenerator
                                 foreach (var project in Draft.Projects)
                                 {
                                     main.Item().Text(Safe(project.Name)).SemiBold();
-                                    if (!string.IsNullOrWhiteSpace(project.Link))
-                                    {
-                                        var linkItem = main.Item();
-                                        linkItem.Hyperlink(NormalizeUrl(project.Link));
-                                        linkItem.Text(project.Link).FontColor(Colors.Blue.Darken2).FontSize(9);
-                                    }
+                                if (!string.IsNullOrWhiteSpace(project.Link))
+                                {
+                                    main.Item()
+                                        .Hyperlink(NormalizeUrl(project.Link))
+                                        .Text(project.Link)
+                                        .FontColor(Colors.Blue.Darken2)
+                                        .FontSize(9);
+                                }
                                     main.Item().Text(Safe(project.Description)).FontSize(9.5f);
                                 }
                             }
@@ -461,9 +601,11 @@ public sealed class CvPdfGenerator
                                 {
                                     if (!string.IsNullOrWhiteSpace(entry.Url))
                                     {
-                                        var linkItem = contact.Item();
-                                        linkItem.Hyperlink(entry.Url);
-                                        linkItem.Text(entry.Label).FontSize(9.2f).FontColor(Colors.Grey.Darken2);
+                                        contact.Item()
+                                            .Hyperlink(entry.Url)
+                                            .Text(entry.Label)
+                                            .FontSize(9.2f)
+                                            .FontColor(Colors.Grey.Darken2);
                                     }
                                     else
                                     {
@@ -505,9 +647,11 @@ public sealed class CvPdfGenerator
                             column.Item().Text(Safe(project.Name)).SemiBold();
                             if (!string.IsNullOrWhiteSpace(project.Link))
                             {
-                                var linkItem = column.Item();
-                                linkItem.Hyperlink(NormalizeUrl(project.Link));
-                                linkItem.Text(project.Link).FontColor(Colors.Blue.Darken2).FontSize(9);
+                                column.Item()
+                                    .Hyperlink(NormalizeUrl(project.Link))
+                                    .Text(project.Link)
+                                    .FontColor(Colors.Blue.Darken2)
+                                    .FontSize(9);
                             }
                             column.Item().Text(Safe(project.Description)).FontSize(9.5f);
                         }
@@ -580,9 +724,11 @@ public sealed class CvPdfGenerator
                                 {
                                     if (!string.IsNullOrWhiteSpace(entry.Url))
                                     {
-                                        var linkItem = contact.Item();
-                                        linkItem.Hyperlink(entry.Url);
-                                        linkItem.Text(entry.Label).FontColor(Colors.Grey.Darken2).FontSize(9.5f);
+                                        contact.Item()
+                                            .Hyperlink(entry.Url)
+                                            .Text(entry.Label)
+                                            .FontColor(Colors.Grey.Darken2)
+                                            .FontSize(9.5f);
                                     }
                                     else
                                     {
@@ -628,9 +774,11 @@ public sealed class CvPdfGenerator
                             }
                             if (!string.IsNullOrWhiteSpace(project.Link))
                             {
-                                var linkItem = column.Item();
-                                linkItem.Hyperlink(NormalizeUrl(project.Link));
-                                linkItem.Text(project.Link).FontColor(Colors.Blue.Darken2).FontSize(9);
+                                column.Item()
+                                    .Hyperlink(NormalizeUrl(project.Link))
+                                    .Text(project.Link)
+                                    .FontColor(Colors.Blue.Darken2)
+                                    .FontSize(9);
                             }
                             column.Item().Text(Safe(project.Description)).FontSize(9.5f);
                         }
@@ -700,9 +848,10 @@ public sealed class CvPdfGenerator
                                 {
                                     if (!string.IsNullOrWhiteSpace(entry.Url))
                                     {
-                                        var linkItem = contact.Item();
-                                        linkItem.Hyperlink(entry.Url);
-                                        linkItem.Text(entry.Label).FontSize(9.2f);
+                                        contact.Item()
+                                            .Hyperlink(entry.Url)
+                                            .Text(entry.Label)
+                                            .FontSize(9.2f);
                                     }
                                     else
                                     {
@@ -761,9 +910,11 @@ public sealed class CvPdfGenerator
                                     left.Item().Text(Safe(project.Name)).SemiBold();
                                     if (!string.IsNullOrWhiteSpace(project.Link))
                                     {
-                                        var linkItem = left.Item();
-                                        linkItem.Hyperlink(NormalizeUrl(project.Link));
-                                        linkItem.Text(project.Link).FontColor(Colors.Blue.Darken2).FontSize(9);
+                                    left.Item()
+                                        .Hyperlink(NormalizeUrl(project.Link))
+                                        .Text(project.Link)
+                                        .FontColor(Colors.Blue.Darken2)
+                                        .FontSize(9);
                                     }
                                     left.Item().Text(Safe(project.Description)).FontSize(9.5f);
                                 }
@@ -837,9 +988,10 @@ public sealed class CvPdfGenerator
                                 {
                                     if (!string.IsNullOrWhiteSpace(entry.Url))
                                     {
-                                        var linkItem = contact.Item();
-                                        linkItem.Hyperlink(entry.Url);
-                                        linkItem.Text(entry.Label).FontSize(9.2f);
+                                        contact.Item()
+                                            .Hyperlink(entry.Url)
+                                            .Text(entry.Label)
+                                            .FontSize(9.2f);
                                     }
                                     else
                                     {
@@ -886,9 +1038,11 @@ public sealed class CvPdfGenerator
                                     main.Item().Text(Safe(project.Name)).SemiBold();
                                     if (!string.IsNullOrWhiteSpace(project.Link))
                                     {
-                                        var linkItem = main.Item();
-                                        linkItem.Hyperlink(NormalizeUrl(project.Link));
-                                        linkItem.Text(project.Link).FontColor(Colors.Blue.Darken2).FontSize(9);
+                                        main.Item()
+                                            .Hyperlink(NormalizeUrl(project.Link))
+                                            .Text(project.Link)
+                                            .FontColor(Colors.Blue.Darken2)
+                                            .FontSize(9);
                                     }
                                     main.Item().Text(Safe(project.Description)).FontSize(9.5f);
                                 }

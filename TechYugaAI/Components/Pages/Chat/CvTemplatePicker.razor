@@ -3,12 +3,8 @@
 <div class="cv-template-picker">
     @foreach (var template in Templates)
     {
-        <label class="cv-template-option @(template.Id == SelectedTemplateId ? "selected" : "")">
-            <input type="radio"
-                   name="cv-template"
-                   value="@template.Id"
-                   checked="@(template.Id == SelectedTemplateId)"
-                   @onchange="@(() => SelectedTemplateIdChanged.InvokeAsync(template.Id))" />
+        <button type="button" class="cv-template-option @(template.Id == SelectedTemplateId ? "selected" : "")"
+                @onclick="@(() => SelectedTemplateIdChanged.InvokeAsync(template.Id))">
             <div class="cv-template-card @template.PreviewClass">
                 <div class="cv-template-swatch" style="background:@template.AccentHex"></div>
                 <div class="cv-template-meta">
@@ -16,7 +12,7 @@
                     <div class="cv-template-desc">@template.Description</div>
                 </div>
             </div>
-        </label>
+        </button>
     }
 </div>
 

@@ -51,7 +51,11 @@ public class TechYugaAgentTools
         }
         catch (Exception ex)
         {
-            return $"[ERROR] PDF generation failed. {ex.Message}";
+            var detail = ex.InnerException is null
+                ? $"{ex.GetType().Name}: {ex.Message}"
+                : $"{ex.GetType().Name}: {ex.Message} | Inner: {ex.InnerException.GetType().Name}: {ex.InnerException.Message}";
+            Console.WriteLine($"[PDF ERROR] {detail}");
+            return $"[ERROR] PDF generation failed. {detail}";
         }
     }
 

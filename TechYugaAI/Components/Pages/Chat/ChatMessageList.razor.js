@@ -17,6 +17,13 @@ window.customElements.define('chat-messages', class ChatMessages extends HTMLEle
         // Debounce the calls in case multiple DOM updates occur together
         cancelAnimationFrame(this._nextAutoScroll);
         this._nextAutoScroll = requestAnimationFrame(() => {
+            if (ChatMessages._isFirstAutoScroll) {
+                const hasMessages = this.querySelector('.user-message, .assistant-message');
+                if (!hasMessages) {
+                    ChatMessages._isFirstAutoScroll = false;
+                    return;
+                }
+            }
             const addedUserMessage = mutations.some(m => Array.from(m.addedNodes).some(n => n.parentElement === this && n.classList?.contains('user-message')));
             const elem = this.lastElementChild;
             if (ChatMessages._isFirstAutoScroll || addedUserMessage || this._elemIsNearScrollBoundary(elem, 300)) {

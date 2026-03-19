@@ -31,7 +31,6 @@ public sealed class CvDraftState
         }
 
         SelectedTemplateId = templateId;
-        ClearGeneratedPdf();
         NotifyChanged();
     }
 

@@ -18,11 +18,32 @@
 <PageTitle>TechYugaAI - @currentMode.ToString()</PageTitle>
 
 @* --- COMMON UI TOOLBAR --- *@
-<div class="techyuga-nav d-flex gap-2 p-3 bg-light border-bottom">
-    <button class="btn @(currentMode == TechYugaMode.General ? "btn-primary" : "btn-outline-primary")" @onclick="() => SwitchMode(TechYugaMode.General)">General Chat</button>
-    <button class="btn @(currentMode == TechYugaMode.CVCreator ? "btn-primary" : "btn-outline-primary")" @onclick="() => SwitchMode(TechYugaMode.CVCreator)">CV Creator</button>
-    <button class="btn @(currentMode == TechYugaMode.BidMaker ? "btn-primary" : "btn-outline-primary")" @onclick="() => SwitchMode(TechYugaMode.BidMaker)">Bid Maker</button>
-    <button class="btn @(currentMode == TechYugaMode.ProjectProposal ? "btn-primary" : "btn-outline-primary")" @onclick="() => SwitchMode(TechYugaMode.ProjectProposal)">Proposals</button>
+<div class="techyuga-nav bg-light border-bottom">
+    <div class="techyuga-nav-inner page-width">
+        <div class="techyuga-nav-left">
+            <button class="btn @(currentMode == TechYugaMode.General ? "btn-primary" : "btn-outline-primary")" @onclick="() => SwitchMode(TechYugaMode.General)">General Chat</button>
+            <button class="btn @(currentMode == TechYugaMode.CVCreator ? "btn-primary" : "btn-outline-primary")" @onclick="() => SwitchMode(TechYugaMode.CVCreator)">CV Creator</button>
+            <button class="btn @(currentMode == TechYugaMode.BidMaker ? "btn-primary" : "btn-outline-primary")" @onclick="() => SwitchMode(TechYugaMode.BidMaker)">Bid Maker</button>
+            <button class="btn @(currentMode == TechYugaMode.ProjectProposal ? "btn-primary" : "btn-outline-primary")" @onclick="() => SwitchMode(TechYugaMode.ProjectProposal)">Proposals</button>
+        </div>
+        <div class="techyuga-nav-right">
+            <button class="theme-toggle" @onclick="ToggleThemeAsync" aria-pressed="@isDarkMode" aria-label="Toggle theme" title="Toggle theme">
+                @if (isDarkMode)
+                {
+                    <svg class="theme-toggle-icon sun" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
+                        <circle cx="12" cy="12" r="4" />
+                        <path d="M12 2.5v2.5M12 19v2.5M4.5 12H2M22 12h-2.5M5.6 5.6 3.8 3.8M20.2 20.2l-1.8-1.8M18.4 5.6l1.8-1.8M3.8 20.2l1.8-1.8" />
+                    </svg>
+                }
+                else
+                {
+                    <svg class="theme-toggle-icon moon" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M21 14.5A8.5 8.5 0 1 1 9.5 3a7 7 0 1 0 11.5 11.5Z" />
+                    </svg>
+                }
+            </button>
+        </div>
+    </div>
 </div>
 
 @if (currentMode != TechYugaMode.CVCreator)
@@ -38,8 +59,16 @@
             <button class="cv-tab @(currentCvTab == CvWorkflowTab.Prompt ? "active" : "")" @onclick="() => SwitchCvTab(CvWorkflowTab.Prompt)">Prompt + Job Description</button>
             <button class="cv-tab @(currentCvTab == CvWorkflowTab.Upload ? "active" : "")" @onclick="() => SwitchCvTab(CvWorkflowTab.Upload)">Resume Upload</button>
         </div>
-        <div class="cv-template-badge">
-            Template: <strong>@TemplateRegistry.Get(CvDraftState.SelectedTemplateId).Name</strong>
+        <div class="cv-toolbar-actions">
+            <div class="cv-template-badge">
+                Template: <strong>@TemplateRegistry.Get(CvDraftState.SelectedTemplateId).Name</strong>
+            </div>
+            <button type="button" class="cv-newchat-btn" @onclick="NewCvChatAsync">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="new-chat-icon">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+                <span class="cv-newchat-label">New chat</span>
+            </button>
         </div>
     </div>
 
@@ -134,7 +163,7 @@
                     <label class="cv-field-label">Prompt *</label>
                     <textarea class="cv-textarea" @bind="uploadJobDescription" @bind:event="oninput" rows="6" placeholder="Include job description, skills, experience required, and any other expectations here."></textarea>
                     <div class="cv-prompt-actions">
-                        <button class="btn btn-primary" @onclick="GenerateFromUploadAsync">Improve Resume</button>
+                        <button class="cv-action-btn" @onclick="GenerateFromUploadAsync">Improve Resume</button>
                     </div>
                     <div class="cv-template-inline">
                         <div class="cv-field-label">Choose a template *</div>
@@ -172,14 +201,25 @@
 
         <div class="cv-right">
             <div class="cv-preview-header">
-                <div>
+                <div class="cv-preview-left">
                     <h3>Live Preview</h3>
                     <div class="cv-preview-sub">Template: @TemplateRegistry.Get(CvDraftState.SelectedTemplateId).Name</div>
                 </div>
-                @if (CvDraftState.LastGeneratedPdfUrl is not null)
-                {
-                    <span class="cv-preview-status">PDF Ready</span>
-                }
+                <div class="cv-preview-actions-top">
+                    @if (HasGeneratedPdf)
+                    {
+                        <div class="cv-preview-actions-left">
+                            <a class="cv-action-btn" href="@CvDraftState.LastGeneratedPdfUrl" target="_blank">View PDF</a>
+                            <a class="cv-action-btn" href="@CvDraftState.LastGeneratedPdfUrl" download="@CvDraftState.LastGeneratedPdfFileName">Download PDF</a>
+                        </div>
+                    }
+                    else
+                    {
+                        <button class="cv-action-btn" @onclick="() => RequestPdfGenerationAsync(showStatusMessages: false)" disabled="@isPdfGenerating">
+                            @(isPdfGenerating ? "Generating..." : "Generate PDF with Assistant")
+                        </button>
+                    }
+                </div>
             </div>
 
             <div class="cv-preview-body">
@@ -188,21 +228,7 @@
                 </div>
             </div>
 
-            <div class="cv-preview-actions">
-                @if (CvDraftState.LastGeneratedPdfUrl is not null)
-                {
-                    <a class="btn btn-outline-primary" href="@CvDraftState.LastGeneratedPdfUrl" target="_blank">View PDF</a>
-                    <a class="btn btn-primary" href="@CvDraftState.LastGeneratedPdfUrl" download="@CvDraftState.LastGeneratedPdfFileName">Download PDF</a>
-                    @if (currentCvTab != CvWorkflowTab.Guided)
-                    {
-                        <button class="btn btn-outline-secondary" @onclick="() => SwitchCvTab(CvWorkflowTab.Guided)">Update CV (Guided)</button>
-                    }
-                }
-                else
-                {
-                    <button class="btn btn-primary" @onclick="RequestPdfGenerationAsync">Generate PDF with Assistant</button>
-                }
-            </div>
+            
         </div>
     </div>
 }
@@ -260,12 +286,23 @@ else
     private ChatMessage? currentResponseMessage;
     private ChatInput? chatInput;
     private ChatSuggestions? chatSuggestions;
+    private bool isDarkMode;
+    private bool isPdfGenerating;
 
     protected override void OnInitialized()
     {
         InitializeTools();
         CvDraftState.OnChange += HandleDraftChange;
         messages.Add(new(ChatRole.System, GetSystemPrompt()));
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            isDarkMode = await JS.InvokeAsync<bool>("techyugaTheme.init");
+            await InvokeAsync(StateHasChanged);
+        }
     }
 
     private void HandleDraftChange() => InvokeAsync(StateHasChanged);
@@ -373,10 +410,15 @@ else
         await ResetConversationAsync();
     }
 
-    private void OnTemplateSelected(string templateId)
+    private async Task OnTemplateSelected(string templateId)
     {
         templateSelectionTouched = true;
         CvDraftState.SetTemplate(templateId);
+
+        if (CvDraftState.LastGeneratedPdfUrl is not null && HasExistingDraftData())
+        {
+            await RequestPdfGenerationAsync(showStatusMessages: false);
+        }
     }
 
     private async Task GenerateFromPromptAsync()
@@ -476,28 +518,55 @@ else
         }
     }
 
-        private async Task RequestPdfGenerationAsync()
+    private async Task RequestPdfGenerationAsync(bool showStatusMessages = false)
+    {
+        try
         {
-            try
+            if (isPdfGenerating)
             {
-                var template = TemplateRegistry.Get(CvDraftState.SelectedTemplateId);
-                var draftJson = JsonSerializer.Serialize(CvDraftState.Draft, DraftJsonOptions);
-                var message = $"Please generate the final CV PDF using template {template.Name} ({template.Id}). Use GenerateCVDoc with the full cvJson draft.\ncvJson:\n{draftJson}";
-                var displayMessage = new ChatMessage(ChatRole.User, "Generate the final CV PDF.");
-                var aiMessage = new ChatMessage(ChatRole.User, message);
-                await AddUserMessageAsync(
-                    displayMessage,
-                    aiUserMessage: aiMessage,
-                    forceFreshContext: true,
-                    suppressAssistantText: true,
-                    inProgressLabel: "Generating final CV PDF...",
-                    completionLabel: "PDF generation completed. Use View/Download if available.");
+                return;
             }
-            catch (Exception ex)
+
+            isPdfGenerating = true;
+            var template = TemplateRegistry.Get(CvDraftState.SelectedTemplateId);
+            var draftJson = JsonSerializer.Serialize(CvDraftState.Draft, DraftJsonOptions);
+
+            CancelAnyCurrentResponse();
+            chatSuggestions?.Clear();
+            if (showStatusMessages)
             {
-                AddLocalErrorMessage(ex);
+                AddAssistantStatusMessage("Generating final CV PDF...");
+            }
+
+            var result = await Task.Run(() => AgentTools.GenerateCVDoc(template.Id, draftJson));
+            if (result.StartsWith("[SUCCESS]", StringComparison.OrdinalIgnoreCase))
+            {
+                if (showStatusMessages)
+                {
+                    AddAssistantStatusMessage("PDF generation completed. Use View/Download if available.");
+                }
+            }
+            else
+            {
+                var detail = result.StartsWith("[ERROR]", StringComparison.OrdinalIgnoreCase)
+                    ? result.Substring("[ERROR]".Length).Trim()
+                    : result;
+                if (showStatusMessages)
+                {
+                    AddAssistantStatusMessage($"PDF generation failed. {detail}");
+                }
             }
         }
+        catch (Exception ex)
+        {
+            AddLocalErrorMessage(ex);
+        }
+        finally
+        {
+            isPdfGenerating = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
 
     private async Task HandleResumeUploadAsync(InputFileChangeEventArgs args)
     {
@@ -640,8 +709,27 @@ else
         }
     }
 
-    private Task AddUserMessageFromInputAsync(ChatMessage userMessage)
-        => AddUserMessageAsync(userMessage);
+    private async Task AddUserMessageFromInputAsync(ChatMessage userMessage)
+    {
+        if (currentMode == TechYugaMode.CVCreator && IsPdfRequestMessage(userMessage.Text))
+        {
+            await RequestPdfGenerationAsync();
+            return;
+        }
+
+        if (currentMode == TechYugaMode.CVCreator
+            && CvDraftState.LastGeneratedPdfUrl is not null
+            && IsDownloadHelpMessage(userMessage.Text))
+        {
+            CancelAnyCurrentResponse();
+            messages.Add(userMessage);
+            messages.Add(new(ChatRole.Assistant, "Your PDF is ready. Use the View PDF or Download PDF buttons on the right panel."));
+            chatSuggestions?.Update(messages);
+            return;
+        }
+
+        await AddUserMessageAsync(userMessage);
+    }
 
     private async Task AddUserMessageCoreAsync(
         ChatMessage userMessage,
@@ -677,7 +765,14 @@ else
 
             await foreach (var update in ChatClient.GetStreamingResponseAsync(requestMessages, requestOptions, currentResponseCancellation.Token))
             {
-                messages.AddMessages(update, filter: c => c is not TextContent);
+                if (suppressAssistantText)
+                {
+                    messages.AddMessages(update, filter: c => c is not TextContent && c is not FunctionCallContent);
+                }
+                else
+                {
+                    messages.AddMessages(update, filter: c => c is not TextContent);
+                }
                 if (!suppressAssistantText)
                 {
                     responseText.Text += update.Text;
@@ -744,17 +839,46 @@ else
         chatOptions.ConversationId = null;
         statefulMessageCount = 0;
         chatSuggestions?.Clear();
-        if (chatInput is not null)
+        if (currentMode != TechYugaMode.CVCreator && chatInput is not null)
         {
             await chatInput.FocusAsync();
         }
     }
+
+    private async Task NewCvChatAsync()
+    {
+        CvDraftState.Reset();
+        hrJobDescription = null;
+        uploadJobDescription = null;
+        uploadedResumeText = null;
+        uploadedResumeFileName = null;
+        uploadError = null;
+        templateSelectionTouched = false;
+        promptAttempted = false;
+        uploadAttempted = false;
+        currentResponseCancellation?.Cancel();
+        currentResponseMessage = null;
+        messages.Clear();
+        messages.Add(new(ChatRole.System, GetSystemPrompt()));
+        chatOptions.ConversationId = null;
+        statefulMessageCount = 0;
+        chatSuggestions?.Clear();
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private bool HasGeneratedPdf => CvDraftState.LastGeneratedPdfUrl is not null && HasExistingDraftData();
 
     private void CancelAnyCurrentResponse()
     {
         if (currentResponseMessage is not null) messages.Add(currentResponseMessage);
         currentResponseCancellation?.Cancel();
         currentResponseMessage = null;
+    }
+
+    private async Task ToggleThemeAsync()
+    {
+        isDarkMode = await JS.InvokeAsync<bool>("techyugaTheme.toggle");
+        await InvokeAsync(StateHasChanged);
     }
 
     [Description("Loads documents for search.")]
@@ -822,6 +946,16 @@ else
         _ = InvokeAsync(StateHasChanged);
     }
 
+    private void AddAssistantStatusMessage(string text)
+    {
+        if (messages.Count > 0 && messages[^1].Role == ChatRole.Assistant && messages[^1].Text == text)
+        {
+            return;
+        }
+
+        messages.Add(new(ChatRole.Assistant, text));
+    }
+
     private bool HasExistingDraftData()
         => !string.IsNullOrWhiteSpace(CvDraftState.Draft.FullName)
            || !string.IsNullOrWhiteSpace(CvDraftState.Draft.Summary)
@@ -845,6 +979,32 @@ else
             || normalized.Contains("fresher")
             || normalized.Contains("0 years")
             || normalized.Contains("0 year");
+    }
+
+    private static bool IsPdfRequestMessage(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        var normalized = text.ToLowerInvariant();
+        return normalized.Contains("generate") && normalized.Contains("pdf");
+    }
+
+    private static bool IsDownloadHelpMessage(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        var normalized = text.ToLowerInvariant();
+        return normalized.Contains("download")
+            || normalized.Contains("view pdf")
+            || normalized.Contains("see the pdf")
+            || normalized.Contains("get the pdf")
+            || normalized.Contains("open the pdf");
     }
 
     public void Dispose()

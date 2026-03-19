@@ -157,7 +157,7 @@
         }
         if (!string.IsNullOrWhiteSpace(contact.Phone))
         {
-            links.Add(new ContactLink(contact.Phone, $"tel:{NormalizePhone(contact.Phone)}", null));
+            links.Add(new ContactLink(contact.Phone, null, null));
         }
         if (!string.IsNullOrWhiteSpace(contact.Location))
         {
