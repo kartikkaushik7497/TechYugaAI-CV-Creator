@@ -113,6 +113,8 @@
     border: 1px solid #e5e7eb;
     border-radius: 1rem;
     box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+    margin-top: 0;
+    align-self: start;
 }
 
 .cv-left {
@@ -131,6 +133,16 @@
     max-height: calc(100vh - 12rem);
     overflow-y: auto;
     z-index: 1;
+}
+
+.cv-left .chat-container {
+    background-color: #f9fafb;
+    border-top-color: #e5e7eb;
+}
+
+:global(body.theme-dark) .cv-left .chat-container {
+    background-color: #0b0f14;
+    border-top-color: #1f2a37;
 }
 
 .cv-guide-card,
