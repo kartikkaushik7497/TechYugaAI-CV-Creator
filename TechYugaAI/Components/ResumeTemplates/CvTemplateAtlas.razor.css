@@ -4,6 +4,7 @@
     border-radius: 0.75rem;
     padding: 1.5rem;
     background: #ffffff;
+    color: #0f172a;
     width: 100%;
 }
 
@@ -60,6 +61,7 @@
     display: grid;
     gap: 0.35rem;
     font-size: 0.9rem;
+    color: #1f2937;
 }
 
 .cv-template-atlas .cv-item-header {
@@ -69,6 +71,11 @@
 .cv-template-atlas .cv-item-meta {
     font-size: 0.82rem;
     color: #6b7280;
+}
+
+.cv-template-atlas p {
+    margin: 0.35rem 0;
+    color: #1f2937;
 }
 
 .cv-template-atlas ul {

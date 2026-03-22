@@ -4,6 +4,7 @@
     border-radius: 0.75rem;
     padding: 1.5rem;
     background: #ffffff;
+    color: #0f172a;
     display: grid;
     gap: 1.5rem;
     width: 100%;
@@ -55,6 +56,11 @@
 .cv-template-executive .cv-item {
     margin-bottom: 0.75rem;
     font-size: 0.85rem;
+    color: #1f2937;
+}
+
+.cv-template-executive p {
+    margin: 0.35rem 0;
     color: #1f2937;
 }
 

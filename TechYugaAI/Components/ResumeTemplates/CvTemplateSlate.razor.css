@@ -3,6 +3,7 @@
     border: 1px solid #e2e8f0;
     border-radius: 0.75rem;
     background: #ffffff;
+    color: #0f172a;
     width: 100%;
     overflow: hidden;
 }
@@ -62,6 +63,11 @@
     color: var(--cv-accent);
     border-bottom: 1px solid var(--cv-accent);
     padding-bottom: 0.3rem;
+}
+
+.cv-template-slate p {
+    margin: 0.35rem 0;
+    color: #1f2937;
 }
 
 .cv-template-slate .cv-item {

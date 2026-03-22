@@ -14,10 +14,10 @@
 
 @code {
     private static string Prompt = @"
-        Suggest up to 3 follow-up questions that I could ask you to help me complete my task.
+        Suggest up to 3 follow-up questions that request specific missing details or confirm changes needed to complete the task.
+        Avoid advice-only questions that don't add concrete data (e.g., avoid 'What should I include?').
         Each suggestion must be a complete sentence, maximum 6 words.
-        Each suggestion must be phrased as something that I (the user) would ask you (the assistant) in response to your previous message,
-        for example 'How do I do that?' or 'Explain ...'.
+        Each suggestion must be phrased as something that I (the user) would ask you (the assistant) in response to your previous message.
         If there are no suggestions, reply with an empty list.
     ";
 
@@ -25,7 +25,7 @@
     private CancellationTokenSource? cancellation;
 
     [Parameter]
-    public EventCallback<ChatMessage> OnSelected { get; set; }
+    public EventCallback<string> OnSelected { get; set; }
 
     public void Clear()
     {
@@ -64,7 +64,7 @@
 
     private async Task AddSuggestionAsync(string text)
     {
-        await OnSelected.InvokeAsync(new(ChatRole.User, text));
+        await OnSelected.InvokeAsync(text);
     }
 
     private IEnumerable<ChatMessage> ReduceMessages(IReadOnlyList<ChatMessage> messages)

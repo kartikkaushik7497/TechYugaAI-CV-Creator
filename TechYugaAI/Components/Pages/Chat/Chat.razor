@@ -194,7 +194,7 @@
             </ChatMessageList>
 
             <div class="chat-container">
-                <ChatSuggestions OnSelected="@AddUserMessageFromInputAsync" @ref="@chatSuggestions" />
+                <ChatSuggestions OnSelected="@HandleSuggestionAsync" @ref="@chatSuggestions" />
                 <ChatInput OnSend="@AddUserMessageFromInputAsync" @ref="@chatInput" />
             </div>
         </div>
@@ -231,6 +231,30 @@
             
         </div>
     </div>
+
+    @if (showValidationModal)
+    {
+        <div class="cv-modal-backdrop" @onclick="CloseValidationModal">
+            <div class="cv-modal" @onclick:stopPropagation="true">
+                <div class="cv-modal-header">
+                    <div class="cv-modal-title">Complete Required Fields</div>
+                    <button type="button" class="cv-modal-close" @onclick="CloseValidationModal" aria-label="Close">&times;</button>
+                </div>
+                <div class="cv-modal-body">
+                    <p class="cv-modal-sub">Please fix the following before continuing:</p>
+                    <ul class="cv-modal-list">
+                        @foreach (var warning in validationWarnings)
+                        {
+                            <li>@warning</li>
+                        }
+                    </ul>
+                </div>
+                <div class="cv-modal-actions">
+                    <button type="button" class="cv-action-btn" @onclick="CloseValidationModal">Got it</button>
+                </div>
+            </div>
+        </div>
+    }
 }
 else
 {
@@ -245,7 +269,7 @@ else
     </ChatMessageList>
 
     <div class="chat-container">
-        <ChatSuggestions OnSelected="@AddUserMessageFromInputAsync" @ref="@chatSuggestions" />
+        <ChatSuggestions OnSelected="@HandleSuggestionAsync" @ref="@chatSuggestions" />
         <ChatInput OnSend="@AddUserMessageFromInputAsync" @ref="@chatInput" />
     </div>
 }
@@ -288,6 +312,8 @@ else
     private ChatSuggestions? chatSuggestions;
     private bool isDarkMode;
     private bool isPdfGenerating;
+    private bool showValidationModal;
+    private List<string> validationWarnings = new();
 
     protected override void OnInitialized()
     {
@@ -340,6 +366,11 @@ else
                     and experienced professionals (focus on impact and work history). Keep the resume ATS-optimized.
                     Available templates: {templateList}. Use the selected template ID when generating PDFs.
                     {jsonSchema}
+                    Important: If the user asks for guidance only (e.g., "What skills should I include?" or "Can you help with my summary?"),
+                    respond with advice and DO NOT call UpdateCvDraft or change any fields. Only call UpdateCvDraft when the user provides
+                    explicit, concrete data to update. Never replace existing fields with placeholders like "[Your Profession]".
+                    For partial updates, include the full JSON and keep all unchanged fields exactly as-is. Do not return empty arrays or empty strings unless you are clearing them.
+                    To clear a section or field, add a token in additionalNotes like "__clear__:experiences" (sections: skills, skillGroups, experiences, education, projects, certifications, additionalNotes, summary, headline, fullname, roletarget, yearsofexperience, contact).
                     Always call UpdateCvDraft after every user response that provides new information.
                     Provide a complete JSON draft that retains any previously known data. Do not clear fields unless instructed.
                     If the user asks to remove or clear a section, set the corresponding string to "" or array to [].
@@ -355,6 +386,11 @@ else
                     ensure strong impact statements, and fill missing sections if possible without inventing facts.
                     Available templates: {templateList}. Use the selected template ID when generating PDFs.
                     {jsonSchema}
+                    Important: If the user asks for guidance only (e.g., "What skills should I include?"),
+                    respond with advice and DO NOT call UpdateCvDraft unless they provide specific values to update.
+                    Never overwrite existing fields with placeholders.
+                    For partial updates, include the full JSON and keep all unchanged fields exactly as-is. Do not return empty arrays or empty strings unless you are clearing them.
+                    To clear a section or field, add a token in additionalNotes like "__clear__:experiences" (sections: skills, skillGroups, experiences, education, projects, certifications, additionalNotes, summary, headline, fullname, roletarget, yearsofexperience, contact).
                     First call UpdateCvDraft with the full JSON draft. Then respond with a short summary and ask for edits.
                     When the user requests the final PDF, call GenerateCVDoc with templateId and the full cvJson draft.
                     If the user indicates no experience is required, do not include any Experience entries and set yearsOfExperience to "0".
@@ -368,6 +404,10 @@ else
                 Populate all relevant sections without inventing facts.
                 Available templates: {templateList}. Use the selected template ID when generating PDFs.
                 {jsonSchema}
+                Important: If the user asks for guidance only, respond with advice and DO NOT call UpdateCvDraft unless they provide specific values.
+                Never overwrite existing fields with placeholders.
+                For partial updates, include the full JSON and keep all unchanged fields exactly as-is. Do not return empty arrays or empty strings unless you are clearing them.
+                To clear a section or field, add a token in additionalNotes like "__clear__:experiences" (sections: skills, skillGroups, experiences, education, projects, certifications, additionalNotes, summary, headline, fullname, roletarget, yearsofexperience, contact).
                 First call UpdateCvDraft with the full JSON draft. Then respond with a short summary and ask if edits are needed.
                 When the user requests the final PDF, call GenerateCVDoc with templateId and the full cvJson draft.
                 If the user indicates no experience is required, do not include any Experience entries and set yearsOfExperience to "0".
@@ -693,11 +733,12 @@ else
         bool forceFreshContext = false,
         bool suppressAssistantText = false,
         string? inProgressLabel = null,
-        string? completionLabel = null)
+        string? completionLabel = null,
+        bool disableTools = false)
     {
         try
         {
-            await AddUserMessageCoreAsync(userMessage, aiUserMessage, forceFreshContext, suppressAssistantText, inProgressLabel, completionLabel);
+            await AddUserMessageCoreAsync(userMessage, aiUserMessage, forceFreshContext, suppressAssistantText, inProgressLabel, completionLabel, disableTools);
         }
         catch (Exception ex)
         {
@@ -710,6 +751,9 @@ else
     }
 
     private async Task AddUserMessageFromInputAsync(ChatMessage userMessage)
+        => await AddUserMessageFromInputAsync(userMessage, guidanceOnly: false);
+
+    private async Task AddUserMessageFromInputAsync(ChatMessage userMessage, bool guidanceOnly)
     {
         if (currentMode == TechYugaMode.CVCreator && IsPdfRequestMessage(userMessage.Text))
         {
@@ -728,7 +772,13 @@ else
             return;
         }
 
-        await AddUserMessageAsync(userMessage);
+        await AddUserMessageAsync(userMessage, disableTools: guidanceOnly);
+    }
+
+    private async Task HandleSuggestionAsync(string text)
+    {
+        var guidanceOnly = currentMode == TechYugaMode.CVCreator;
+        await AddUserMessageFromInputAsync(new(ChatRole.User, text), guidanceOnly: guidanceOnly);
     }
 
     private async Task AddUserMessageCoreAsync(
@@ -737,7 +787,8 @@ else
         bool forceFreshContext,
         bool suppressAssistantText,
         string? inProgressLabel,
-        string? completionLabel)
+        string? completionLabel,
+        bool disableTools)
     {
         CancelAnyCurrentResponse();
         messages.Add(userMessage);
@@ -763,11 +814,21 @@ else
                 ? new ChatOptions { Tools = chatOptions.Tools }
                 : chatOptions;
 
+            if (disableTools || (currentMode == TechYugaMode.CVCreator && IsGuidanceOnlyQuestion(userMessage.Text)))
+            {
+                requestOptions = new ChatOptions
+                {
+                    ConversationId = chatOptions.ConversationId
+                };
+            }
+
             await foreach (var update in ChatClient.GetStreamingResponseAsync(requestMessages, requestOptions, currentResponseCancellation.Token))
             {
                 if (suppressAssistantText)
                 {
-                    messages.AddMessages(update, filter: c => c is not TextContent && c is not FunctionCallContent);
+                    messages.AddMessages(update, filter: c => c is not TextContent
+                        && c is not FunctionCallContent
+                        && c is not FunctionResultContent);
                 }
                 else
                 {
@@ -936,8 +997,14 @@ else
             return;
         }
 
-        var message = "Please complete the following before submitting:\n- " + string.Join("\n- ", warnings);
-        await JS.InvokeVoidAsync("alert", message);
+        validationWarnings = warnings.ToList();
+        showValidationModal = true;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void CloseValidationModal()
+    {
+        showValidationModal = false;
     }
 
     private void AddLocalErrorMessage(Exception ex)
@@ -1005,6 +1072,30 @@ else
             || normalized.Contains("see the pdf")
             || normalized.Contains("get the pdf")
             || normalized.Contains("open the pdf");
+    }
+
+    private static bool IsGuidanceOnlyQuestion(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return false;
+        }
+
+        var normalized = text.ToLowerInvariant().Trim();
+        if (!normalized.EndsWith("?"))
+        {
+            return false;
+        }
+
+        return normalized.Contains("what specific skills")
+            || normalized.Contains("what skills should")
+            || normalized.Contains("can you help me with my summary")
+            || normalized.Contains("help me with my summary")
+            || normalized.Contains("how do i add my education")
+            || normalized.Contains("how do i add education")
+            || normalized.Contains("what changes would you recommend")
+            || normalized.Contains("what should i include")
+            || normalized.Contains("can you help me");
     }
 
     public void Dispose()
